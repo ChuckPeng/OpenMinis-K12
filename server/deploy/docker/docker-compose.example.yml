@@ -1,0 +1,18 @@
+# Secondary path. Bind only to the reverse-proxy host network namespace.
+services:
+  openminis-k12-server:
+    image: openminis-k12-server:1.0.0-m5a
+    user: "65532:65532"
+    environment:
+      OPENMINIS_K12_DATA_DIR: /data
+      OPENMINIS_K12_PUBLIC_BASE_URL: https://REPLACE_WITH_PUBLIC_BASE_URL
+      OPENMINIS_K12_TRUSTED_PROXIES: 172.16.0.0/12
+      OPENMINIS_K12_DEVICE_LISTEN: 0.0.0.0:8080
+      OPENMINIS_K12_ADMIN_LISTEN: 0.0.0.0:8081
+    volumes:
+      - openminis_data:/data
+    ports:
+      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:8081:8081"
+volumes:
+  openminis_data:

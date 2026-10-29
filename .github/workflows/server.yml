@@ -1,0 +1,54 @@
+name: Server
+
+on:
+  push:
+    paths:
+      - "server/**"
+      - ".github/workflows/server.yml"
+      - "docs/k12/ops/**"
+  pull_request:
+    paths:
+      - "server/**"
+      - ".github/workflows/server.yml"
+      - "docs/k12/ops/**"
+
+jobs:
+  server:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache-dependency-path: server/go.sum
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: server/web/package.json
+
+      - name: Build admin UI
+        working-directory: server/web
+        run: |
+          npm install
+          npm run build:ci
+
+      - name: Go test
+        env:
+          OPENMINIS_K12_ALLOW_EMPTY_TRUSTED_PROXIES: "1"
+        run: go test ./...
+
+      - name: Go build with ldflags
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          PKG=github.com/ChuckPeng/OpenMinis-K12/server/internal/version
+          go build -trimpath \
+            -ldflags "-X ${PKG}.Version=1.0.0-m5a -X ${PKG}.VersionCode=1000005 -X ${PKG}.GitCommit=${GITHUB_SHA} -X ${PKG}.UpstreamVersion=1.15" \
+            -o /tmp/openminis-k12-server ./cmd/openminis-k12-server
+          /tmp/openminis-k12-server --version

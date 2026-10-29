@@ -33,10 +33,10 @@ class K12M3AcceptanceTest {
 
     @Test
     fun versionIsM3() {
-        assertEquals("1.0.0-m3", Version.NAME)
-        assertEquals(1_000_004, Version.CODE)
+        // M3 gates remain; product SemVer advances with later milestones (currently m5a+).
+        assertTrue(Version.CODE >= 1_000_004)
         assertTrue(Version.matchesCodeFormula())
-        assertEquals("v1.0.0-m3", Version.MILESTONE_TAG)
+        assertTrue(repoFile("CHANGELOG.md").readText().contains("## [1.0.0-m3]"))
     }
 
     @Test
