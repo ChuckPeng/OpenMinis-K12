@@ -14,15 +14,15 @@
 
 ## 公开接口
 
-契约：`api/device-api.yaml`。传输用 `NetworkHttp.client`（H-17），TLS，配对时固定的证书指纹不符则拒绝（J11）。
+契约：`api/device-api.yaml`。传输只用 `public_base_url` 的 HTTPS，在家和在外同一地址。用 `NetworkHttp.client`（H-17）。配对时固定的证书指纹不符则拒绝（J11）。
 
-签名头：`X-K12-Device`、`X-K12-Ts`、`X-K12-Nonce`、`X-K12-Sig`。签名内容 = 方法 ‖ 路径 ‖ 时间戳 ‖ nonce ‖ 正文 SHA-256。时间窗 ±5 分钟。nonce 长度见 T-28。
+签名头：`X-K12-Device`、`X-K12-Ts`（Unix 毫秒）、`X-K12-Nonce`（32 位小写十六进制）、`X-K12-Sig`。签名字节串是五行，用换行连接：大写方法、路径（含查询串）、时间戳、nonce、正文 SHA-256 的小写十六进制。空正文哈希空字节。时间窗 ±5 分钟。
 
 周期：WorkManager。事件平时每 5 分钟或满 100 条上传，日简报前 15 分钟强制一次。每批最多 500 条，gzip。心跳带上 `config_version_applied`、App 版本、当日用量、权限自检结果。
 
 ## 数据
 
-本机保存：中继地址、证书指纹、中继公钥、`device_id`、已应用配置版本、已消费的 `grant_id`、未确认的事件。不保存企微密钥、解锁码、`parent_advice_json`。
+本机保存：`public_base_url`、证书指纹、中继公钥、`device_id`、已应用配置版本、已消费的 `grant_id`、未确认的事件。不保存企微密钥、解锁码、`parent_advice_json`、告警片段。
 
 ## 依赖
 
@@ -57,4 +57,4 @@ J1、J5、J11，以及 S8、S14 中与上传和孩子版报告有关的部分。
 
 ## 未决
 
-T-06、T-15、T-25、T-28、T-29、T-30、T-41。
+无。长轮询无变化时仍返回当前 JSON，`changed` 为 false。

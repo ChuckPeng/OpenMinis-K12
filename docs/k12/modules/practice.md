@@ -10,22 +10,22 @@
 | --- | --- |
 | v1 | 无。休息提醒在家长管控，全 App 生效 |
 | v1.1 M4 | 本模块全部：TTS、ASR、键盘兜底、可选 sherpa 模型、`drill_result` |
-| 不做 | 口语评分（与 §18.2 的冲突见 T-33）；课文原文 |
+| 不做 | 口语评分；课文原文 |
 
 ## 公开接口
 
 | 接口 | 说明 |
 | --- | --- |
 | `TextToSpeechManager`（H-19） | 系统引擎优先 |
-| `SpeechRecognitionManager` | 引擎选择见 T-07 |
-| sherpa-onnx | 无可用系统能力时的端侧引擎。模型可选下载（T-20），Apache-2.0 |
+| `SpeechRecognitionManager` | 有中文系统引擎则用系统，否则 sherpa-onnx。无 GMS 默认 sherpa |
+| sherpa-onnx | 没有可用中文系统引擎时使用。模型约 300 MB，可选下载，Apache-2.0 |
 | catalog 词表 | 只读 |
 
 可选参考：hanzi-writer、pinyin-pro（小学）、chinese-poetry（只对齐课内篇目，不整包当课文）。均为借鉴，不是 v1.1 必做。
 
 ## 数据
 
-`drill_result`：`drill`、`list_id`、`total`、`correct`。`score` 在 T-33 落定前不写。
+`drill_result`：`drill`、`list_id`、`total`、`correct`。不写 `score`。
 
 ## 依赖
 
@@ -48,7 +48,7 @@
 
 ## 配置
 
-语种跟随科目。模型是否下载由家长确认。休息阈值不在本模块配置。
+语种跟随科目。sherpa 模型约 300 MB，可选下载，到 v1.1 才提示。休息阈值不在本模块配置。
 
 ## 验收
 
@@ -56,4 +56,4 @@ C1–C3。C4（小学 25 / 初中 40 分钟休息）由家长管控在 v1 实现
 
 ## 未决
 
-T-07、T-20、T-23、T-33。
+测试机 B 的系统 TTS 是否可用，见 T-23。不可用则走 sherpa。

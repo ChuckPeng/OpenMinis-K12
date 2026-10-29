@@ -8,8 +8,7 @@ info:
   description: |
     平板与 OpenMinis-K12 服务端之间的契约，外加公网端口上的企微回调、签名报告链接和健康检查。
     设计基线 r16。管理 API 见 admin-api.yaml。
-    服务端许可证是否与仓库同为 GPL-3.0 见文档 T-08。
-    标有 x-k12-ambiguous 的字段或操作，设计未写死，见 docs/k12/README.md。
+    技术默认已收口，见 docs/k12/README.md。服务端许可证仍待所有者确认（建议 GPL-3.0）。
     设备接口的响应不得包含 parent_advice_json、解锁码或告警片段。
 
 servers:
@@ -27,7 +26,7 @@ tags:
   - name: report
     description: 签名短期链接。不使用设备签名。
   - name: health
-    description: 健康检查。暴露面见 T-41。
+    description: 健康检查。无认证，两个端口都有。指标不在设备端口。
 
 security:
   - deviceSignature: []
@@ -71,8 +70,7 @@ paths:
       tags: [device]
       operationId: getPairStatus
       summary: 等待家长确认绑定
-      description: 设计写认证为设备签名。家长确认前公钥是否已能验签，见 T-29。无变化时的正文见 T-30。
-      x-k12-ambiguous: true
+      description: pending_confirm 与 active 的设备密钥都可以调用。其他接口只要 active。无变化时 changed 为 false。
       parameters:
         - $ref: "#/components/parameters/Wait"
         - $ref: "#/components/parameters/K12Device"
@@ -129,8 +127,7 @@ paths:
       tags: [device]
       operationId: waitUnlockRequest
       summary: 长轮询解锁结果
-      description: 批准时返回签名授权。wait 时限内没有变化时返回什么，见 T-30。
-      x-k12-ambiguous: true
+      description: 始终返回当前状态。批准时 grant 为签名信封。无变化时 changed 为 false。
       parameters:
         - $ref: "#/components/parameters/UnlockId"
         - $ref: "#/components/parameters/Wait"
@@ -181,7 +178,7 @@ paths:
       operationId: postAlert
       summary: 上报情绪或安全告警
       description: |
-        企微消息不含片段。片段窗口见 T-05，加密主体见 T-06。
+        企微消息不含片段。snippet 为触发句前后各至多 2 句，服务端加密入库。
         同一会话 30 分钟内同级合并由服务端完成。
       parameters:
         - $ref: "#/components/parameters/K12Device"
@@ -262,10 +259,10 @@ paths:
         - name: period
           in: query
           required: false
-          description: 期间键。格式未写死（T-31）。
+          description: 起止日期，形如 2026-01-01/2026-01-07。
           schema:
             type: string
-          x-k12-ambiguous: true
+            pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}/[0-9]{4}-[0-9]{2}-[0-9]{2}$"
         - $ref: "#/components/parameters/K12Device"
         - $ref: "#/components/parameters/K12Ts"
         - $ref: "#/components/parameters/K12Nonce"
@@ -297,10 +294,9 @@ paths:
         - name: since
           in: query
           required: false
-          description: 游标。设计未规定编码（T-31）。
+          description: 不透明游标，取上次响应的 next_cursor。不要自行解析。
           schema:
             type: string
-          x-k12-ambiguous: true
         - $ref: "#/components/parameters/Wait"
         - $ref: "#/components/parameters/K12Device"
         - $ref: "#/components/parameters/K12Ts"
@@ -308,14 +304,18 @@ paths:
         - $ref: "#/components/parameters/K12Sig"
       responses:
         "200":
-          description: 新任务。无新任务时的正文见 T-30。
+          description: 当前任务。无新任务时 changed 为 false。
           content:
             application/json:
               schema:
                 type: object
                 additionalProperties: false
-                required: [tasks]
+                required: [tasks, changed]
                 properties:
+                  changed:
+                    type: boolean
+                  next_cursor:
+                    type: string
                   tasks:
                     type: array
                     items:
@@ -385,8 +385,7 @@ paths:
       summary: 上传端到端加密备份
       description: |
         正文是密文。服务端不能解密。
-        SHA-256 与 kdf_params 放在头里，这是草案，设计未规定携带位置（T-31）。
-      x-k12-ambiguous: true
+        SHA-256 与 kdf_params 放在 X-K12-Content-Sha256 与 X-K12-Kdf-Params。
       parameters:
         - $ref: "#/components/parameters/K12Device"
         - $ref: "#/components/parameters/K12Ts"
@@ -400,7 +399,7 @@ paths:
         - name: X-K12-Kdf-Params
           in: header
           required: true
-          description: JSON 对象的文本。字段未定（T-31）。
+          description: JSON 文本，含 argon2id 的 m、t、p 与 salt。
           schema:
             type: string
       requestBody:
@@ -428,7 +427,7 @@ paths:
         - $ref: "#/components/parameters/K12Sig"
       responses:
         "200":
-          description: 密文。kdf_params 在响应头，与上传草案一致（T-31）。
+          description: 密文。kdf_params 在响应头，与上传相同。
           headers:
             X-K12-Content-Sha256:
               schema:
@@ -500,7 +499,7 @@ paths:
       operationId: getSignedReport
       summary: 打开一份签名报告
       description: |
-        HMAC-SHA256。被签名的字节串见 T-31。默认 72 小时（T-12）。
+        HMAC-SHA256。明文为 link_id、换行、十进制 Unix 秒。默认 72 小时。
         过期、篡改或撤销时不返回任何数字。页面要求 noindex、no-referrer、无第三方资源。
         此路由在公网端口。其余报告与管理接口在公网端口返回 404。
       security: []
@@ -515,7 +514,7 @@ paths:
           required: true
           schema:
             type: integer
-            description: 到期时刻。单位未定，见 T-31。
+            description: Unix 秒。
         - name: sig
           in: query
           required: true
@@ -561,6 +560,8 @@ paths:
           schema:
             type: string
       responses:
+        "400":
+          $ref: "#/components/responses/Error"
         "200":
           description: 解密后的 echostr。
           content:
@@ -602,18 +603,80 @@ paths:
             schema:
               type: string
       responses:
+        "400":
+          $ref: "#/components/responses/Error"
         "200":
           description: 空正文。
+
+  /api/v1/device/extension-requests:
+    post:
+      tags: [device]
+      operationId: createExtensionRequest
+      summary: 申请加时
+      description: M5c。按钮为加 15 分钟、加 30 分钟或拒绝。
+      parameters:
+        - $ref: "#/components/parameters/K12Device"
+        - $ref: "#/components/parameters/K12Ts"
+        - $ref: "#/components/parameters/K12Nonce"
+        - $ref: "#/components/parameters/K12Sig"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [client_request_id, kind]
+              properties:
+                client_request_id:
+                  type: string
+                kind:
+                  type: string
+                  enum: [time, turns, images]
+      responses:
+        "201":
+          description: 已创建。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnlockCreated"
+        "401":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/device/extension-requests/{id}:
+    get:
+      tags: [device]
+      operationId: waitExtensionRequest
+      summary: 长轮询加时结果
+      parameters:
+        - $ref: "#/components/parameters/UnlockId"
+        - $ref: "#/components/parameters/Wait"
+        - $ref: "#/components/parameters/K12Device"
+        - $ref: "#/components/parameters/K12Ts"
+        - $ref: "#/components/parameters/K12Nonce"
+        - $ref: "#/components/parameters/K12Sig"
+      responses:
+        "200":
+          description: 当前状态。无变化时 changed 为 false。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnlockView"
+        "401":
+          $ref: "#/components/responses/Error"
 
   /healthz:
     get:
       tags: [health]
       operationId: getHealthz
       summary: 存活
-      description: 设计写认证为「无 / 仅管理端口」（T-41）。Docker HEALTHCHECK 使用二进制子命令，不依赖此 HTTP。
-      x-k12-ambiguous: true
+      description: 两个端口都提供。无认证。正文只有状态词。容器探针优先用二进制子命令。
       security: []
       responses:
+        "400":
+          $ref: "#/components/responses/Error"
         "200":
           description: 进程在。
           content:
@@ -626,10 +689,11 @@ paths:
       tags: [health]
       operationId: getReadyz
       summary: 就绪
-      description: 含数据库与 token 状态。暴露面同 /healthz（T-41）。
-      x-k12-ambiguous: true
+      description: 无认证。token 字段只写 ok 或 unavailable，不写令牌本身。
       security: []
       responses:
+        "400":
+          $ref: "#/components/responses/Error"
         "200":
           description: 可以接收流量。
           content:
@@ -643,24 +707,6 @@ paths:
               schema:
                 $ref: "#/components/schemas/Health"
 
-  /metrics:
-    get:
-      tags: [health]
-      operationId: getMetrics
-      summary: 可选指标
-      description: 只有计数与时延，没有内容。是否启用、放在哪个端口，见 T-41。
-      x-k12-ambiguous: true
-      security: []
-      responses:
-        "200":
-          description: 文本指标。格式未定。
-          content:
-            text/plain:
-              schema:
-                type: string
-        "404":
-          description: 未启用。
-
 components:
   securitySchemes:
     deviceSignature:
@@ -669,7 +715,7 @@ components:
       name: X-K12-Sig
       description: |
         同时必须带 X-K12-Device、X-K12-Ts、X-K12-Nonce。
-        签名内容 = 方法 ‖ 路径 ‖ 时间戳 ‖ nonce ‖ 正文 SHA-256。
+        签名字节串为五行，用换行连接：大写方法、含查询串的路径、Unix 毫秒、32 位十六进制 nonce、正文 SHA-256 小写十六进制。
         时间窗 ±5 分钟。OpenAPI 的 apiKey 只能声明一个头，其余头在参数里。
 
   parameters:
@@ -704,14 +750,14 @@ components:
       name: X-K12-Ts
       in: header
       required: true
-      description: 请求时间。与正文时间一样，单位在 T-31 落定前同时接受，实现时只能选一种并改本字段。
+      description: Unix 毫秒，十进制。
       schema:
         type: string
     K12Nonce:
       name: X-K12-Nonce
       in: header
       required: true
-      description: 随机串。长度见 T-28。缓存 10 分钟。
+      description: 32 位小写十六进制（128 位）。缓存 10 分钟。
       schema:
         type: string
     K12Sig:
@@ -724,7 +770,7 @@ components:
 
   responses:
     Error:
-      description: 失败。错误 JSON 的字段是占位（T-28）。
+      description: 失败。
       content:
         application/json:
           schema:
@@ -738,7 +784,7 @@ components:
       properties:
         error:
           type: string
-      description: 形状未在设计中规定（T-28）。
+      description: error 为稳定的 snake_case 代码。
 
     Accepted:
       type: object
@@ -774,19 +820,24 @@ components:
           type: string
         status:
           type: string
-          description: 初始为待确认。枚举见 T-31。
+          enum: [pending_confirm, active, revoked]
+        code_secret_alg:
+          type: string
+          enum: [sealedbox_x25519, ecies_p256]
         code_secret_wrapped:
           type: string
-          description: 用设备公钥封装的 codeSecret。算法见 T-29。
-          x-k12-ambiguous: true
+          description: 32 字节 codeSecret 的密封结果，base64。
 
     PairStatus:
       type: object
       additionalProperties: false
-      required: [status]
+      required: [status, changed]
       properties:
         status:
           type: string
+          enum: [pending_confirm, active, revoked]
+        changed:
+          type: boolean
 
     UnlockCreate:
       type: object
@@ -799,7 +850,7 @@ components:
           type: string
         question_hash:
           type: string
-          description: 算法见 T-28。
+          description: 确认后题干的 SHA-256，小写十六进制。
         hints_used:
           type: integer
           minimum: 0
@@ -820,8 +871,18 @@ components:
     Grant:
       type: object
       additionalProperties: false
+      required: [payload, signature]
+      properties:
+        payload:
+          $ref: "#/components/schemas/GrantPayload"
+        signature:
+          type: string
+          description: base64url，无填充。覆盖 payload 的规范化 JSON（键排序、无多余空白、UTF-8）。
+
+    GrantPayload:
+      type: object
+      additionalProperties: false
       required: [v, grant_id, request_id, device_id, question_hash, scope, expires_at, decided_by_label]
-      description: 规范化字段。签名如何附在响应上见 T-28。scope 字面量见 T-28。
       properties:
         v:
           type: integer
@@ -833,17 +894,15 @@ components:
           type: string
         question_hash:
           type: string
+          description: 确认后题干的 SHA-256，小写十六进制。
         scope:
           type: string
-          description: 单题，或 15 分钟。
+          enum: [question, minutes_15]
         expires_at:
           type: string
           format: date-time
         decided_by_label:
           type: string
-        signature:
-          type: string
-          description: 占位。封装方式未定（T-28）。
 
     UnlockView:
       type: object
@@ -855,6 +914,8 @@ components:
         status:
           type: string
           enum: [pending, approved, denied, expired, consumed]
+        changed:
+          type: boolean
         grant:
           $ref: "#/components/schemas/Grant"
 
@@ -866,8 +927,6 @@ components:
         method:
           type: string
           enum: [grant, backup_code, pin, totp]
-          description: 设计写 consumed，或已用备用码或 PIN。totp 是否走同一 ack，设计未单列。
-          x-k12-ambiguous: true
         grant_id:
           type: string
 
@@ -886,9 +945,9 @@ components:
           description: UTC 毫秒。
         dedupe_key:
           type: string
-        snippet_enc:
+        snippet:
           type: string
-          description: 触发片段。窗口 T-05，加密 T-06。可以没有。
+          description: 触发句及前后各至多 2 句。只在 TLS 中出现，服务端再加密入库。可以没有。
 
     EventBatch:
       type: object
@@ -921,6 +980,8 @@ components:
         type:
           type: string
           enum:
+            - stem_confirmed
+            - calc_checked
             - session_start
             - session_end
             - active_span
@@ -957,8 +1018,7 @@ components:
           additionalProperties: true
           description: |
             只含数字、枚举与哈希。禁止题目文字、图片与聊天原文。
-            各 type 的字段见 docs/k12/data-model.md。
-            attempt.outcome、drill_result.score、待核题见 T-33、T-35、T-48。
+            字段见 docs/k12/data-model.md。v1.1 的 drill_result 不写 score。
 
     EventBatchResult:
       type: object
@@ -1060,9 +1120,7 @@ components:
           type: integer
           minimum: 0
         permission_check:
-          type: object
-          additionalProperties: true
-          description: 字段未定（T-53）。禁止设备型号。
+          $ref: "#/components/schemas/PermissionCheck"
 
     HeartbeatResponse:
       type: object
@@ -1072,15 +1130,56 @@ components:
         server_time:
           type: string
           format: date-time
-          description: 校时。与事件的毫秒整型并存时的换算见 T-31。
+          description: UTC。事件的 occurred_at 与 X-K12-Ts 仍用 Unix 毫秒。
         config_version:
           type: integer
         config_json:
-          type: object
-          additionalProperties: true
-          description: 仅当版本比平板已应用的更新时出现。已知键见 data-model.md，未穷尽（T-31、T-24）。
+          $ref: "#/components/schemas/DeviceConfig"
         app_update_available:
           type: boolean
+
+    PermissionCheck:
+      type: object
+      additionalProperties: false
+      properties:
+        notifications_enabled:
+          type: boolean
+        battery_unrestricted:
+          type: boolean
+        background_allowed:
+          type: boolean
+        exact_alarm_allowed:
+          type: boolean
+
+    DeviceConfig:
+      type: object
+      additionalProperties: false
+      description: 仅当版本比平板已应用的更新时出现。不含告警阈值。
+      properties:
+        stage:
+          type: string
+          enum: ["小学低年级", "小学高年级", "初中", "高中"]
+        daily_limit_minutes:
+          type: integer
+        weekend_extra_minutes:
+          type: integer
+        break_reminder_minutes:
+          type: integer
+        late_night_start:
+          type: string
+        late_night_end:
+          type: string
+        reveal_policy:
+          type: object
+          additionalProperties: true
+        turn_limit:
+          type: integer
+        image_limit:
+          type: integer
+        companion_limit_minutes:
+          type: integer
+        study_day_min_minutes:
+          type: integer
 
     AppUpdate:
       type: object

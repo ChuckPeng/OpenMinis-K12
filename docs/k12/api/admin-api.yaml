@@ -7,9 +7,8 @@ info:
     identifier: GPL-3.0-only
   description: |
     管理端口上的 API。设计原文写 /api/admin，本文统一为 /api/v1/admin（T-25）。
-    只给了资源名的操作标了 x-k12-ambiguous（T-26）。
-    Cookie 名 k12_session、CSRF 头 X-CSRF-Token 是草案（T-27）。
-    监听端口号未定。公网端口访问这些路径必须 404。
+    本文件是管理 API 契约。Cookie 名 k12_session，CSRF 头 X-CSRF-Token。
+    设备端口访问这些路径必须 404。默认管理端口 8081，只绑回环接口。
 
 servers:
   - url: "{origin}"
@@ -32,7 +31,7 @@ tags:
   - name: dingtalk
     description: 钉钉与抽取。v1.2。
   - name: advice
-    description: 亲子建议条目。M5f。路径为草案。
+    description: 亲子建议条目。M5f。
   - name: ops
     description: 模板、审计、设置、备份。
 
@@ -84,6 +83,8 @@ paths:
           csrfHeader: []
       summary: 退出
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "204":
           description: 会话已清除。
 
@@ -93,6 +94,8 @@ paths:
       operationId: listWecomApps
       summary: 列出企微应用
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "200":
           description: 列表。Secret 与 AESKey 不回显。
           content:
@@ -108,8 +111,7 @@ paths:
         - sessionCookie: []
           csrfHeader: []
       summary: 保存企微配置
-      description: 设计把 PUT 写在集合上，没有区分新建与更新（T-26）。
-      x-k12-ambiguous: true
+      description: 保存一个应用。已有 id 则更新，否则创建。
       requestBody:
         required: true
         content:
@@ -117,6 +119,8 @@ paths:
             schema:
               $ref: "#/components/schemas/WecomAppWrite"
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "200":
           description: 已保存。
           content:
@@ -135,6 +139,8 @@ paths:
       parameters:
         - $ref: "#/components/parameters/Id"
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "200":
           description: 成功或失败原因。不得返回 token。
           content:
@@ -165,6 +171,8 @@ paths:
                   type: string
                   enum: [text, button_card]
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "200":
           description: 发送结果。
           content:
@@ -177,8 +185,9 @@ paths:
       tags: [people]
       operationId: listParents
       summary: 接收人列表
-      x-k12-ambiguous: true
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "200":
           description: 列表。
           content:
@@ -194,7 +203,6 @@ paths:
         - sessionCookie: []
           csrfHeader: []
       summary: 添加接收人
-      x-k12-ambiguous: true
       requestBody:
         required: true
         content:
@@ -202,6 +210,8 @@ paths:
             schema:
               $ref: "#/components/schemas/ParentWrite"
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "201":
           description: 已创建。
           content:
@@ -217,7 +227,6 @@ paths:
         - sessionCookie: []
           csrfHeader: []
       summary: 修改接收人
-      x-k12-ambiguous: true
       parameters:
         - $ref: "#/components/parameters/Id"
       requestBody:
@@ -227,6 +236,8 @@ paths:
             schema:
               $ref: "#/components/schemas/ParentWrite"
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "200":
           description: 已更新。
           content:
@@ -240,10 +251,11 @@ paths:
         - sessionCookie: []
           csrfHeader: []
       summary: 删除接收人
-      x-k12-ambiguous: true
       parameters:
         - $ref: "#/components/parameters/Id"
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "204":
           description: 已删除。
 
@@ -253,6 +265,8 @@ paths:
       operationId: listChildren
       summary: 孩子档案
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "200":
           description: 只用标签与学段。
           content:
@@ -268,8 +282,7 @@ paths:
         - sessionCookie: []
           csrfHeader: []
       summary: 保存孩子档案
-      description: 设计为 GET/PUT 集合（T-26）。
-      x-k12-ambiguous: true
+      description: 按 child_id 创建或更新一份档案。
       requestBody:
         required: true
         content:
@@ -277,6 +290,8 @@ paths:
             schema:
               $ref: "#/components/schemas/ChildWrite"
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "200":
           description: 已保存。
           content:
@@ -292,6 +307,8 @@ paths:
       parameters:
         - $ref: "#/components/parameters/Id"
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "200":
           description: 当前版本。
           content:
@@ -314,8 +331,10 @@ paths:
             schema:
               type: object
               additionalProperties: true
-              description: 已知键见 data-model.md。告警阈值是否包含见 T-24。
+              description: 键与设备端 DeviceConfig 相同，不含告警阈值。
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "200":
           description: 新版本。
           content:
@@ -346,6 +365,8 @@ paths:
             type: string
             format: date
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "204":
           description: 已删除并安排重算。
 
@@ -354,8 +375,9 @@ paths:
       tags: [people]
       operationId: listDevices
       summary: 设备列表
-      x-k12-ambiguous: true
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "200":
           description: 标签、最后在线、状态、已应用配置版本。不含设备型号。
           content:
@@ -373,11 +395,12 @@ paths:
         - sessionCookie: []
           csrfHeader: []
       summary: 吊销设备
-      description: 路径是草案。设计只要求能吊销（T-26）。
-      x-k12-ambiguous: true
+      description: 吊销后该设备签名立即失效。
       parameters:
         - $ref: "#/components/parameters/Id"
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "204":
           description: 签名立即失效。
 
@@ -389,21 +412,23 @@ paths:
         - sessionCookie: []
           csrfHeader: []
       summary: 轮换密钥
-      description: 网页有此动作，路径未在接口表中（T-26）。
-      x-k12-ambiguous: true
+      description: 作废当前设备公钥，平板须重新配对。
       parameters:
         - $ref: "#/components/parameters/Id"
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "202":
-          description: 已开始轮换。后续步骤未写。
+          description: 当前公钥作废，平板需要重新配对。
 
   /api/v1/admin/pair-codes:
     get:
       tags: [people]
       operationId: listPairCodes
       summary: 未过期的配对码
-      x-k12-ambiguous: true
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "200":
           description: 不返回可再次使用的明文旧码。新建时只显示一次。
           content:
@@ -419,8 +444,9 @@ paths:
         - sessionCookie: []
           csrfHeader: []
       summary: 生成配对码
-      x-k12-ambiguous: true
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "201":
           description: 含一次性明文与二维码内容。
           content:
@@ -433,7 +459,6 @@ paths:
       tags: [unlock]
       operationId: listUnlockRequests
       summary: 解锁记录
-      x-k12-ambiguous: true
       parameters:
         - $ref: "#/components/parameters/DeviceFilter"
         - name: status
@@ -448,6 +473,8 @@ paths:
             type: string
             format: date
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "200":
           description: 谁批准、耗时。无题目原文。
           content:
@@ -462,8 +489,9 @@ paths:
       tags: [unlock]
       operationId: listAlerts
       summary: 告警列表
-      x-k12-ambiguous: true
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "200":
           description: 不含片段。
           content:
@@ -504,11 +532,12 @@ paths:
         - sessionCookie: []
           csrfHeader: []
       summary: 标记已知晓
-      description: 网页有已知晓。路径未在接口表中（T-26）。
-      x-k12-ambiguous: true
+      description: 记录 acknowledged_by。
       parameters:
         - $ref: "#/components/parameters/Id"
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "204":
           description: 已记录 acknowledged_by。
 
@@ -531,6 +560,8 @@ paths:
             type: string
             format: date
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "200":
           description: usage_daily 行。
           content:
@@ -546,6 +577,8 @@ paths:
       operationId: listReports
       summary: 历史报告
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "200":
           description: 含家长建议字段。
           content:
@@ -582,6 +615,8 @@ paths:
                   type: string
                   format: date
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "200":
           description: 现算的报告。短于 3 天不做环比。24 小时后清理。
           content:
@@ -605,6 +640,8 @@ paths:
           schema:
             type: string
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "204":
           description: 链接失效。
 
@@ -614,6 +651,8 @@ paths:
       operationId: getReportSettings
       summary: 读取报告计划
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "200":
           description: 可按孩子。
           content:
@@ -634,6 +673,8 @@ paths:
             schema:
               $ref: "#/components/schemas/ReportSettings"
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "200":
           description: 已保存。
           content:
@@ -650,6 +691,8 @@ paths:
           csrfHeader: []
       summary: 生成授权二维码
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "200":
           description: 二维码只在管理界面显示。
           content:
@@ -669,9 +712,10 @@ paths:
         - sessionCookie: []
           csrfHeader: []
       summary: 解除授权
-      description: 网页有解除授权。方法未写（T-26）。
-      x-k12-ambiguous: true
+      description: 清除令牌并停止同步。
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "204":
           description: 令牌已清除，同步停止。
 
@@ -681,6 +725,8 @@ paths:
       operationId: getDingtalkAuthStatus
       summary: 授权状态
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "200":
           description: 是否有效、到期、最近同步与错误。不含令牌。
           content:
@@ -696,9 +742,10 @@ paths:
         - sessionCookie: []
           csrfHeader: []
       summary: 立即同步
-      description: 网页动作。路径未写（T-26）。
-      x-k12-ambiguous: true
+      description: 立刻排一次同步。
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "202":
           description: 已排队。
 
@@ -707,8 +754,9 @@ paths:
       tags: [dingtalk]
       operationId: listBindings
       summary: 孩子与班级群
-      x-k12-ambiguous: true
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "200":
           description: 绑定。群名只用家长标签。
           content:
@@ -724,7 +772,6 @@ paths:
         - sessionCookie: []
           csrfHeader: []
       summary: 新建绑定
-      x-k12-ambiguous: true
       requestBody:
         required: true
         content:
@@ -732,6 +779,8 @@ paths:
             schema:
               $ref: "#/components/schemas/BindingWrite"
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "201":
           description: 已创建。
           content:
@@ -747,7 +796,6 @@ paths:
         - sessionCookie: []
           csrfHeader: []
       summary: 修改绑定
-      x-k12-ambiguous: true
       parameters:
         - $ref: "#/components/parameters/Id"
       requestBody:
@@ -757,6 +805,8 @@ paths:
             schema:
               $ref: "#/components/schemas/BindingWrite"
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "200":
           description: 已更新。
           content:
@@ -770,10 +820,11 @@ paths:
         - sessionCookie: []
           csrfHeader: []
       summary: 删除绑定
-      x-k12-ambiguous: true
       parameters:
         - $ref: "#/components/parameters/Id"
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "204":
           description: 已删除。
 
@@ -782,8 +833,9 @@ paths:
       tags: [dingtalk]
       operationId: listClassMessages
       summary: 老师消息
-      x-k12-ambiguous: true
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "200":
           description: 仅老师或管理员。
           content:
@@ -798,8 +850,9 @@ paths:
       tags: [dingtalk]
       operationId: listExtractedTasks
       summary: 抽取结果
-      x-k12-ambiguous: true
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "200":
           description: 任务与投递状态。
           content:
@@ -817,8 +870,7 @@ paths:
         - sessionCookie: []
           csrfHeader: []
       summary: 手工改正科目或截止时间
-      description: 网页允许改正。方法未写（T-26）。
-      x-k12-ambiguous: true
+      description: 只改科目或截止时间。
       parameters:
         - $ref: "#/components/parameters/Id"
       requestBody:
@@ -828,6 +880,8 @@ paths:
             schema:
               $ref: "#/components/schemas/ExtractedTaskPatch"
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "200":
           description: 已改正。
           content:
@@ -843,11 +897,12 @@ paths:
         - sessionCookie: []
           csrfHeader: []
       summary: 重新抽取
-      description: 网页动作。路径未写（T-26）。
-      x-k12-ambiguous: true
+      description: 重新调用抽取。
       parameters:
         - $ref: "#/components/parameters/Id"
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "202":
           description: 已排队。
 
@@ -857,6 +912,8 @@ paths:
       operationId: getLlm
       summary: 读取模型配置
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "200":
           description: 不含 API Key。
           content:
@@ -877,6 +934,8 @@ paths:
             schema:
               $ref: "#/components/schemas/LlmConfigWrite"
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "204":
           description: 已保存。Key 不回显。
 
@@ -890,6 +949,8 @@ paths:
       summary: 用示例通知试抽取
       description: 示例由产品提供，不得使用真实班级内容。
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "200":
           description: 通过 Schema 的 JSON，或失败原因。
           content:
@@ -902,9 +963,10 @@ paths:
       tags: [advice]
       operationId: listAdviceEntries
       summary: 浏览条目库
-      description: 路径未在设计接口表中（T-26）。M5f。
-      x-k12-ambiguous: true
+      description: M5f。条目库。
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "200":
           description: 含原则标签与审核信息。
           content:
@@ -920,7 +982,6 @@ paths:
         - sessionCookie: []
           csrfHeader: []
       summary: 新增家庭条目
-      x-k12-ambiguous: true
       requestBody:
         required: true
         content:
@@ -928,6 +989,8 @@ paths:
             schema:
               $ref: "#/components/schemas/AdviceEntry"
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "201":
           description: 已新增。
           content:
@@ -943,7 +1006,6 @@ paths:
         - sessionCookie: []
           csrfHeader: []
       summary: 停用或修改条目
-      x-k12-ambiguous: true
       parameters:
         - $ref: "#/components/parameters/Id"
       requestBody:
@@ -953,6 +1015,8 @@ paths:
             schema:
               $ref: "#/components/schemas/AdviceEntry"
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "200":
           description: 已保存。
           content:
@@ -965,8 +1029,9 @@ paths:
       tags: [advice]
       operationId: exportAdviceEntries
       summary: 导出 YAML
-      x-k12-ambiguous: true
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "200":
           description: YAML 文本。
           content:
@@ -982,7 +1047,6 @@ paths:
         - sessionCookie: []
           csrfHeader: []
       summary: 导入 YAML
-      x-k12-ambiguous: true
       requestBody:
         required: true
         content:
@@ -990,6 +1054,8 @@ paths:
             schema:
               type: string
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "204":
           description: 校验通过并加载。失败则沿用上一版。
 
@@ -998,8 +1064,9 @@ paths:
       tags: [ops]
       operationId: listSchedules
       summary: 推送计划
-      x-k12-ambiguous: true
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "200":
           description: cron 与种类。
           content:
@@ -1015,7 +1082,6 @@ paths:
         - sessionCookie: []
           csrfHeader: []
       summary: 保存推送计划
-      x-k12-ambiguous: true
       requestBody:
         required: true
         content:
@@ -1025,6 +1091,8 @@ paths:
               items:
                 $ref: "#/components/schemas/Schedule"
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "204":
           description: 已保存。
 
@@ -1033,8 +1101,9 @@ paths:
       tags: [ops]
       operationId: listTemplates
       summary: 消息模板
-      x-k12-ambiguous: true
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "200":
           description: Go text/template 与变量白名单。
           content:
@@ -1050,7 +1119,6 @@ paths:
         - sessionCookie: []
           csrfHeader: []
       summary: 保存消息模板
-      x-k12-ambiguous: true
       requestBody:
         required: true
         content:
@@ -1060,6 +1128,8 @@ paths:
               items:
                 $ref: "#/components/schemas/Template"
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "204":
           description: 已保存。
 
@@ -1068,8 +1138,9 @@ paths:
       tags: [ops]
       operationId: listAudit
       summary: 审计
-      x-k12-ambiguous: true
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "200":
           description: 只读。
           content:
@@ -1084,8 +1155,9 @@ paths:
       tags: [ops]
       operationId: listLogs
       summary: 运行日志与队列
-      x-k12-ambiguous: true
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "200":
           description: 已脱敏。
           content:
@@ -1099,8 +1171,9 @@ paths:
       tags: [ops]
       operationId: getSettings
       summary: 运行设置
-      x-k12-ambiguous: true
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "200":
           description: 保留期、限流、时区、公网地址、可信代理。不含密钥明文。
           content:
@@ -1115,7 +1188,6 @@ paths:
         - sessionCookie: []
           csrfHeader: []
       summary: 保存运行设置
-      x-k12-ambiguous: true
       requestBody:
         required: true
         content:
@@ -1124,6 +1196,8 @@ paths:
               type: object
               additionalProperties: true
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "204":
           description: 已保存。
 
@@ -1135,9 +1209,10 @@ paths:
         - sessionCookie: []
           csrfHeader: []
       summary: 下载服务端备份
-      description: 方法未写（T-26）。主密钥不在文件内。
-      x-k12-ambiguous: true
+      description: 下载服务端备份。主密钥不在文件内。
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "200":
           description: 加密备份包。
           content:
@@ -1154,7 +1229,6 @@ paths:
         - sessionCookie: []
           csrfHeader: []
       summary: 上传并恢复
-      x-k12-ambiguous: true
       requestBody:
         required: true
         content:
@@ -1163,8 +1237,64 @@ paths:
               type: string
               contentMediaType: application/octet-stream
       responses:
+        "401":
+          $ref: "#/components/responses/Error"
         "202":
-          description: 已接受。恢复步骤的确认流程未写。
+          description: 已接受。恢复会替换数据库，调用前服务应已停止写入。
+
+  /api/v1/admin/parent-tasks:
+    post:
+      tags: [people]
+      operationId: createParentTask
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      summary: 家长在网页布置任务
+      description: M5c。平板经 GET /api/v1/device/tasks 拉取，source 为 parent。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [child_id, title]
+              properties:
+                child_id:
+                  type: string
+                  format: uuid
+                title:
+                  type: string
+                detail:
+                  type: string
+                due_at:
+                  type: string
+                  format: date-time
+      responses:
+        "401":
+          $ref: "#/components/responses/Error"
+        "201":
+          description: 已创建。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExtractedTask"
+
+  /metrics:
+    get:
+      tags: [ops]
+      operationId: getMetrics
+      summary: 计数与时延
+      description: 只在管理端口。不含正文内容。
+      responses:
+        "401":
+          $ref: "#/components/responses/Error"
+        "200":
+          description: 文本指标。
+          content:
+            text/plain:
+              schema:
+                type: string
 
 components:
   securitySchemes:
@@ -1172,12 +1302,12 @@ components:
       type: apiKey
       in: cookie
       name: k12_session
-      description: 草案名（T-27）。HttpOnly、SameSite=Strict。HTTPS 时加 Secure。
+      description: HttpOnly、SameSite=Strict。public_base_url 为 https 时加 Secure。
     csrfHeader:
       type: apiKey
       in: header
       name: X-CSRF-Token
-      description: 草案名（T-27）。设计只要求头或表单令牌。
+      description: 写请求必须带此头。登录与首次安装除外。
 
   parameters:
     Id:
@@ -1195,7 +1325,7 @@ components:
 
   responses:
     Error:
-      description: 失败。字段是占位（T-28）。
+      description: 失败。error 为 snake_case。
       content:
         application/json:
           schema:
@@ -1217,7 +1347,7 @@ components:
       properties:
         password:
           type: string
-          description: 强口令规则见 T-27。
+          description: 至少 12 位，且同时含字母和数字。
 
     LoginBody:
       type: object
@@ -1377,7 +1507,7 @@ components:
           type: string
         status:
           type: string
-          description: 枚举未定（T-31）。
+          enum: [pending_confirm, active, revoked]
         last_seen:
           type: string
           format: date-time
@@ -1496,7 +1626,7 @@ components:
     ReportSettings:
       type: object
       additionalProperties: true
-      description: 键见 reports 模块与 §18.8。默认值里仍有待确认项（T-12、T-13）。
+      description: 键见 reports 模块。日简报 20:47 且默认只在周一至周五。文字默认模板。
 
     DingtalkStatus:
       type: object

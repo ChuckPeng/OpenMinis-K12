@@ -6,7 +6,7 @@
 
 ## 允许的改动原则
 
-上游文件只做委派或路由守卫。K12 逻辑放在新包（根包暂定 `com.openminis.k12`，T-40）。不删上游工具实现。
+上游文件只做委派或路由守卫。K12 逻辑放在新包，根包 `com.openminis.k12`。不删上游工具实现。
 
 ## 已核对挂点
 
@@ -30,7 +30,7 @@
 | H-16 | 闹钟 | `scheduled/ScheduledTaskManager.kt`、`scheduled/ScheduledTaskAlarmReceiver.kt`。清单已有 `SCHEDULE_EXACT_ALARM`、`RECEIVE_BOOT_COMPLETED` | 休息提醒可参考。**周报不在平板上跑**，由服务端生成。禁止儿童创建 shell 类定时任务 |
 | H-17 | 访问服务端 | `network/NetworkHttp.kt` 的 `object NetworkHttp`，`client(tag, base)`。清单已有 `INTERNET` | 用派生 OkHttpClient。证书指纹在配对时固定。平板不调用 qyapi |
 | H-18 | 技能 | `data/repository/SkillRepository.kt`，`MAX_SKILLS_IN_PROMPT = 20` | 安装 core + 本机 student + catalog。不覆盖用户更高版本 |
-| H-19 | 语音 | `speech/TextToSpeechManager.kt`；`speech/SpeechRecognitionManager.kt`；`speech/SpeechRecognitionEngine.kt` | 练习页直接调用，不走 shell CLI。引擎选择见 T-07 |
+| H-19 | 语音 | `speech/TextToSpeechManager.kt`；`speech/SpeechRecognitionManager.kt`；`speech/SpeechRecognitionEngine.kt` | 练习页直接调用，不走 shell CLI。有中文系统引擎则用系统，否则 sherpa |
 | H-20 | 与 PIN 无关 | `accessibility/RestrictedSettingsManager.kt` | 只处理 Android 13+ 无障碍「受限设置」。不并入家长锁 |
 
 ## 儿童模式要关掉的 Android 入口
@@ -47,7 +47,9 @@
 
 本树**没有**蓝牙控制接口，也**没有** HomeKit。不要为了设计里的这两个名字去造禁用点。
 
-其余 offload（日历、剪贴板、通知、相册、设备信息、Shizuku 等）是否一律拒绝：T-39。在 T-39 落定前，儿童模式至少拒绝上表，以及 `Routes` 里设计点名的设置/网络/MCP/工具/环境变量页。
+儿童模式再拒绝：日历、剪贴板、通知、相册、设备信息、Shizuku、无障碍、调试类 offload，以及儿童创建定时任务。设置、网络、MCP、工具、环境变量页仍要 PIN。本树没有蓝牙或 HomeKit 接口。
+
+合并上游时若出现 `server/` 目录，先停下来看冲突，再更新本表。
 
 ## 明确不挂钩
 

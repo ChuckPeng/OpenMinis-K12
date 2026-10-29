@@ -19,7 +19,7 @@
 | `PUT /api/v1/device/backups` | 上传密文 |
 | `GET /api/v1/device/backups/latest` | 换机时取回密文 |
 
-口令经 Argon2id 派生密钥，AES-GCM 加密。文件头、关联数据与分块见 T-31。KDF 参数随 `device_backup.kdf_params` 存放，便于以后改参数，但不能让服务端据此解密。
+口令经 Argon2id 派生密钥，AES-GCM 加密。文件布局见数据模型（魔数 `K12B`）。KDF 参数随 `device_backup.kdf_params` 存放，便于以后改参数，但不能让服务端据此解密。
 
 ## 数据
 
@@ -58,4 +58,4 @@
 
 ## 未决
 
-T-31。
+无。

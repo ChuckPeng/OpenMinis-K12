@@ -6,7 +6,7 @@
 
 | 区域 | 约定 |
 | --- | --- |
-| 新的 Kotlin | 新文件、新包。根包暂定 `com.openminis.k12`（T-40）。上游包 `com.openminis.app` 只加挂钩 |
+| 新的 Kotlin | 新文件、新包。根包 `com.openminis.k12`。上游包 `com.openminis.app` 只加挂钩 |
 | 挂钩 | 每个挂钩一行记在 `upstream-patches.md`，含文件、符号、原因、验收编号。没有清单记录的上游改动不合并 |
 | `ChatViewModel` | 只增加一次委托调用，逻辑留在 K12 类里 |
 | 技能 | `assets/k12/skills/` 与平板上的用户技能目录。仓库里只有无个人数据的模板 |

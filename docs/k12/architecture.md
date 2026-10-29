@@ -40,14 +40,38 @@ flowchart LR
 | --- | --- | --- |
 | 平板 App | 儿童主页、技能、揭晓状态机、本机 PIN/TOTP、事件、练习 | 不持有企微密钥；不向家长展示聊天原文；v1 不在平板上做家长报告页 |
 | OpenMinis-K12 服务端 | 配对、解锁状态机、企微、报告、配置、备份密文、管理界面 | 不讲题；不解密平板备份；不向班级群发消息 |
-| 企微转发代理 | 把出站 API 从固定公网 IPv4 发出；模式 B 下把回调转进服务端 | 不持有业务状态。路径白名单见下 |
+| HTTPS 反向代理 | 终结 TLS。对平板、企微回调、管理页和报告链接只发布这一层 | 不持有业务状态。进程不绕过它听公网 |
+| 企微出站转发代理 | 把 `gettoken` / `send` / `update_template_card` 从固定公网 IPv4 发出 | 不收设备 API，不代替上面的 HTTPS 代理 |
 | 企业微信自建应用 | 模板卡片与按钮回调 | 与家中其他应用分 AgentId / Secret / 回调路径 |
 | 钉钉 | v1.2，家长在管理页扫码一次 | 只读老师/管理员消息 |
 | 上游模型层 | 家长在平板按 Minis 原方式配置 | 本项目不改供应商实现，只加 PIN 门 |
 
-模式 B（已选定）：服务端在家中常开主机，出站 API 基址指向转发代理（默认 `https://qyapi.weixin.qq.com`，配置成代理地址）。回调沿用已在用的外网入口，增加专用路径。模式 A（服务端与代理同机）不采用。
+模式 B（已选定）：服务端在家中常开主机。出站企微 API 的基址指向出站转发代理（默认 `https://qyapi.weixin.qq.com`，配置成该代理地址）。入站不走这条出站代理。模式 A（服务端与出站代理同机）不采用。
 
-代理只放行：`/cgi-bin/gettoken`、`/cgi-bin/message/send`、`/cgi-bin/message/update_template_card`，可选 `/cgi-bin/getcallbackip`。只接受服务端来源。MoviePilot 一类菜单代理示例若未包含 `update_template_card`，需要补白名单。
+出站代理只放行：`/cgi-bin/gettoken`、`/cgi-bin/message/send`、`/cgi-bin/message/update_template_card`，可选 `/cgi-bin/getcallbackip`。只接受服务端来源。若现有白名单只有菜单接口，要补上 `update_template_card`。
+
+## 对外 URL
+
+平板在家和在外都使用同一个 `public_base_url`。这是所有者在配置里填写的 HTTPS 源，没有尾部斜杠，可以是域名或 IP，文档不记录具体值。服务端生成链接时只用这个配置，不采用请求里的 `Host` 或 `X-Forwarded-Host`。
+
+| 用途 | URL |
+| --- | --- |
+| 配对二维码里的服务端地址 | `{public_base_url}` |
+| 设备 API | `{public_base_url}/api/v1/device/...` |
+| 企微回调（管理页复制这一条） | `{public_base_url}/wecom/callback/{callback_key}` |
+| 报告链接 | `{public_base_url}/r/{link_id}?exp=...&sig=...` |
+| 管理界面 | `{public_base_url}/` 与 `{public_base_url}/api/v1/admin/...` |
+
+反向代理按路径把请求转到两个明文 HTTP 端口（默认 8080 与 8081，只绑回环接口）：
+
+| 路径 | 转到 |
+| --- | --- |
+| `/api/v1/device/`、`/wecom/`、`/r/`、`/healthz`、`/readyz` | 设备端口 |
+| `/`、`/api/v1/admin/`、`/metrics` | 管理端口 |
+
+设备端口上的管理路径返回 404。更具体的设备路径必须先于管理界面的 `/` 匹配。
+
+`trusted_proxies` 列出服务端眼中的反向代理来源（地址或网段），必填。只有来自这些来源的 `X-Forwarded-For`、`X-Forwarded-Proto`、`X-Forwarded-Host` 才采信，用于限速、Secure Cookie 和 CSRF 同源判断。列表为空时忽略这些头。它不决定对外 URL，对外 URL 始终是 `public_base_url`。
 
 ## 信任边界
 
@@ -68,8 +92,9 @@ flowchart TB
     llm["模型服务"]
     tutor["平板上的讲题模型"]
   end
-  app -->|"签名请求，无企微密钥"| rev
-  core --> wecom
+  app -->|"HTTPS，无企微密钥"| rev
+  wecom -->|"HTTPS 回调"| rev
+  core -->|"出站 API"| wecom
   core --> ding
   core --> llm
   app --> tutor
@@ -83,14 +108,7 @@ flowchart TB
 | 备份口令 | 只在家长手里。服务端只存密文 |
 | 告警片段 | 服务端加密，30 天，仅管理登录后可看。不进企微、不进大模型、设备接口不下发 |
 
-两个监听端口，进程内都是明文 HTTP，TLS 在反向代理终结：
-
-| 端口 | 暴露 | 不暴露 |
-| --- | --- | --- |
-| 公网 | `/api/v1/device/*`、`/wecom/callback/*`、`/r/*` | 管理路径返回 404（R7） |
-| 管理 | Web UI、`/api/v1/admin/*` | 不直接映射到公网，只经反向代理 |
-
-不提供合并成单端口的模式。端口号见 T-27。`trusted_proxies` 之外的 `X-Forwarded-*` 忽略。
+两个监听端口，进程内都是明文 HTTP，默认只绑回环接口。不把这两个端口直接映射到公网，也不合并成一个进程端口。端口号可改，默认 8080（设备）与 8081（管理）。告警片段线上只在 TLS 里出现，落盘为密文。
 
 ## 部署
 
@@ -118,9 +136,9 @@ flowchart TB
 | 用户 | 非 root | 专用系统用户 |
 | 健康检查 | 二进制子命令 `healthcheck`（镜像内无 curl） | 同左 |
 | 配置 | YAML + `OPENMINIS_K12_*` 覆盖；业务配置在库里 | 同左，文件 `/etc/openminis-k12/config.yaml` |
-| 反向代理 | 公网端口与管理端口分开映射，绑定本机或内网 | 同左 |
+| 反向代理 | 容器端口只给本机代理 | 同左。监听地址默认为回环接口 |
 
-本家用哪一种见 T-14。产物：`linux/amd64` 与 `linux/arm64`，`CGO_ENABLED=0`。SQLite 用 `modernc.org/sqlite`，WAL。
+用 Docker 还是 systemd、放在哪台机器，见 T-14。产物始终包含 linux/amd64 与 linux/arm64，`CGO_ENABLED=0`。SQLite 用 `modernc.org/sqlite`，WAL。
 
 ## 数据流
 
@@ -142,7 +160,7 @@ sequenceDiagram
   T->>S: POST ack
 ```
 
-中继不可达时平板 5 秒内改走 PIN / TOTP，解锁申请不排队。10 分钟无人处理则过期。告警与报告在平板排队，恢复后补发并标注延迟。细节见 `modules/unlock.md`。
+时序图省略了反向代理：平板只对 `public_base_url` 发 HTTPS，代理再以 HTTP 转到设备端口。服务端不可达时平板 5 秒内改走 PIN / TOTP，解锁申请不排队。10 分钟无人处理则过期。告警与报告在平板排队，恢复后补发并标注延迟。细节见 `modules/unlock.md`。
 
 ### 学习事件到报告
 
@@ -157,7 +175,7 @@ flowchart LR
   report --> child["孩子端我的报告"]
 ```
 
-日界按家庭时区（默认 `Asia/Shanghai`）与日界时刻（建议 04:00，T-12），不按设备时区。设备时钟用心跳校正，偏差超过 2 分钟则修正 `occurred_at` 并记日志。
+日界按家庭时区（默认 `Asia/Shanghai`）与日界 04:00，不按设备时区。设备时钟用心跳校正，偏差超过 2 分钟则修正 `occurred_at` 并记日志。
 
 亲子建议只出现在家长侧卡片与网页。设备接口在服务端去掉 `parent_advice_json`。
 

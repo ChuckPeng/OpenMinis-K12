@@ -16,11 +16,11 @@
 
 ## 公开接口
 
-`api/admin-api.yaml`。浏览器只谈管理端口。会话 Cookie：HttpOnly、SameSite=Strict；空闲 30 分钟，绝对 12 小时。写请求要 CSRF。CSP 要严。
+`api/admin-api.yaml`。浏览器经 `public_base_url` 访问，反向代理再转到管理端口。会话 Cookie 名 `k12_session`：HttpOnly、SameSite=Strict；空闲 30 分钟，绝对 12 小时。写请求要头 `X-CSRF-Token`。CSP 要严。
 
-认证：argon2id。同一账号或来源 15 分钟内失败 5 次，锁定 15 分钟。忘记口令用 CLI `reset-admin`。无 TOTP（T-46 才考虑）。
+认证：argon2id。口令至少 12 位且含字母和数字。同一账号或来源 15 分钟内失败 5 次，锁定 15 分钟。忘记口令用 CLI `reset-admin`。无 TOTP（T-46 才考虑）。
 
-当 `public_url` 为 https，或可信代理传来 `X-Forwarded-Proto=https` 时，Cookie 加 Secure。向导若发现公网访问却不是 HTTPS，要警告。
+`public_base_url` 为 https，或可信代理传来 `X-Forwarded-Proto=https` 时，Cookie 加 Secure。向导若发现该配置不是 https，要警告。回调 URL 由该配置拼出，不从请求头推导。
 
 ## 数据
 
@@ -49,7 +49,7 @@
 
 ## 配置
 
-时区默认 `Asia/Shanghai`。`trusted_proxies`、`public_url`、保留期、限流、管理员口令在设置页。强口令规则见 T-27。
+时区默认 `Asia/Shanghai`。设置页包含 `public_base_url`、`trusted_proxies`、保留期、限流和管理员口令。`trusted_proxies` 为空时忽略全部 `X-Forwarded-*`。
 
 ## 验收
 
@@ -57,4 +57,4 @@ R1、R2、R6–R9、R11、R12。报告页的 S13、S16 与报告模块一起测�
 
 ## 未决
 
-T-25、T-26、T-27、T-41、T-47。
+无。R12 的体积只作目标，超过时记下实测值（T-47 已收口）。`/metrics` 只在管理端口。

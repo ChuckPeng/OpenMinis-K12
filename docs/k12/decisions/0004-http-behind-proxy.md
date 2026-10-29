@@ -9,10 +9,10 @@
 
 ## 决定
 
-进程只听明文 HTTP。HTTPS 由家长自己的反向代理终结。不内置 ACME，不做 IP 白名单。公网端口与管理端口分开。
+进程只听明文 HTTP，默认绑回环接口，设备端口 8080、管理端口 8081。HTTPS 由所有者的反向代理终结。不内置 ACME，不做源 IP 白名单。两个端口不合并。对外如何发布见 ADR-0013。
 
-管理员认证：argon2id 口令、15 分钟内失败 5 次锁定 15 分钟、会话空闲 30 分钟且绝对 12 小时、写请求 CSRF。不做 TOTP。只信任 `trusted_proxies` 的 `X-Forwarded-*`。
+管理员认证：argon2id 口令、至少 12 位且含字母和数字、15 分钟内失败 5 次锁定 15 分钟、会话 Cookie `k12_session`（HttpOnly、SameSite=Strict）、空闲 30 分钟且绝对 12 小时、写请求校验头 `X-CSRF-Token`。不做 TOTP。只信任 `trusted_proxies` 里的 `X-Forwarded-*`。
 
 ## 后果
 
-口令强度、Cookie 名和端口号仍见 T-27。以后若要二步验证，属于 T-46，不改变本决定的默认。
+以后若要二步验证，属于 T-46，不改变本决定。

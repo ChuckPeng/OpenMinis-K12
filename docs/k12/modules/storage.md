@@ -14,7 +14,7 @@ M5a 一次到位：库、迁移、备份 CLI、两种部署的数据目录。其
 | --- | --- |
 | `server/internal/store` | 各模块的唯一数据库入口 |
 | CLI | `serve`、`migrate`、`backup`、`restore`、`healthcheck`、`reset-admin` |
-| `GET /healthz`、`/readyz` | 含数据库与 token 状态。暴露面 T-41 |
+| `GET /healthz`、`/readyz` | 两个端口都有，无认证。正文只有 `ok` / `unavailable`，不写 token 值 |
 | 可选 `GET /metrics` | 只有计数与时延 |
 
 迁移用 `go:embed` 的 SQL，启动时先自动备份再执行。
@@ -50,7 +50,7 @@ WAL。纯 Go 驱动 `modernc.org/sqlite`，以便 `CGO_ENABLED=0` 交叉编译�
 
 ## 配置
 
-数据目录、主密钥路径、备份保留份数 N（设计写「最近 N 份」，N 的默认未给）。在 N 未定前，安装文档要求显式配置，不猜测。
+数据目录、主密钥路径、`public_base_url`、`trusted_proxies`、监听端口（默认 8080 与 8081，只绑回环接口）。服务端自身备份默认保留 14 份。
 
 ## 验收
 
@@ -58,4 +58,4 @@ R1、R4、R5、R8–R10、R12。R3 的向量测试放在通知模块，本模块
 
 ## 未决
 
-T-08、T-14、T-31、T-41、T-44、T-47。备份份数 N 见上文。
+服务端许可证见 T-08。放在哪台主机、用 Docker 还是 systemd，见 T-14。合并上游时确认仍无 `server/` 目录。R12 不是合并门槛。
