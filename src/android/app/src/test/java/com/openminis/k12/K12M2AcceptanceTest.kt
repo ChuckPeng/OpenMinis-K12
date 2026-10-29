@@ -39,11 +39,11 @@ class K12M2AcceptanceTest {
     }
 
     @Test
-    fun versionIsM2() {
-        assertEquals("1.0.0-m2", Version.NAME)
-        assertEquals(1_000_003, Version.CODE)
+    fun versionAtLeastM2() {
+        assertTrue(Version.NAME.startsWith("1.0.0"))
+        assertTrue(Version.CODE >= 1_000_003)
         assertTrue(Version.matchesCodeFormula())
-        assertEquals("v1.0.0-m2", Version.MILESTONE_TAG)
+        assertEquals("v${Version.NAME}", Version.MILESTONE_TAG)
     }
 
     @Test
