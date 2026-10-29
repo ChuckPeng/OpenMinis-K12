@@ -8,6 +8,28 @@ as defined in `docs/k12/conventions.md` (K12 SemVer is independent of upstream M
 
 ## [Unreleased]
 
+## [1.0.0-m5a] - 2026-10-29
+
+Milestone **M5a · Server core**. Upstream Android baseline: **1.15** (`versionCode` 37). Product SemVer `1.0.0-m5a` / `versionCode` `1000005` (shared with embedded server ldflags).
+
+### Added
+
+- Go module `server/` (`openminis-k12-server`): SQLite (modernc), dual loopback HTTP ports, `public_base_url`, required `trusted_proxies`, argon2id admin sessions + CSRF (no 2FA), GPL-3.0 (WP-S-1/S-2/S-5).
+- WeCom callback `WXBizMsgCrypt` at `/wecom/callback/{callback_key}`; outbox with expiry drop for unlock messages; audit log (WP-S-3/S-4, R3/R5).
+- J12 first: documented live-test procedure (`docs/k12/ops/j12-live-test.md`), admin callback harness (`/api/v1/admin/j12/simulate`), and text / 6-digit backup-code approval fallback (J14) (WP-S-0).
+- Vue 3 + Vite admin UI under `server/web/` (wizard, WeCom, parents, J12 panel, audit, status), embedded via `go:embed` (WP-S-6).
+- systemd unit + install docs (primary); optional Dockerfile / compose example (secondary).
+- CI workflow `.github/workflows/server.yml` (`go test`, admin UI build, ldflags `--version`).
+
+### Changed
+
+- Product SemVer → `1.0.0-m5a` / `versionCode` `1000005`.
+
+### Known v1 release blockers
+
+- **BLOCK-CAS-1** (Symja / real CAS for tutoring A4) remains open from M3; not in M5a scope.
+- Device API / pairing unlock end-to-end is **M5b** (not started).
+
 ## [1.0.0-m3] - 2026-10-29
 
 Milestone **M3 · Mistakes & FSRS**. Upstream Android baseline: **1.15** (`versionCode` 37).

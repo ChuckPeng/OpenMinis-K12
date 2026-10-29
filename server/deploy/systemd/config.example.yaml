@@ -1,0 +1,18 @@
+# Copy to /etc/openminis-k12/config.yaml and fill in. Do not commit real values.
+# Env overrides: OPENMINIS_K12_DATA_DIR, OPENMINIS_K12_PUBLIC_BASE_URL,
+# OPENMINIS_K12_TRUSTED_PROXIES, OPENMINIS_K12_DEVICE_LISTEN, OPENMINIS_K12_ADMIN_LISTEN.
+
+data_dir: /var/lib/openminis-k12
+# master_key_path: /var/lib/openminis-k12/master.key
+
+# HTTPS origin of the reverse proxy (no trailing slash). Domain or IP — never
+# recorded in this repository.
+public_base_url: https://REPLACE_WITH_PUBLIC_BASE_URL
+
+# Required. Only these sources may supply X-Forwarded-* headers.
+trusted_proxies:
+  - 127.0.0.1/32
+
+device_listen: 127.0.0.1:8080
+admin_listen: 127.0.0.1:8081
+backup_keep: 14
