@@ -11,9 +11,9 @@
 | `ChatViewModel` | 只增加一次委托调用，逻辑留在 K12 类里 |
 | 技能 | `assets/k12/skills/` 与平板上的用户技能目录。仓库里只有无个人数据的模板 |
 | 学生档案、catalog 实例、NC 图谱、模型 Key | 不进 git |
-| 服务端 | 顶层 `server/`，独立 `go.mod`。模块路径按设计写作 `github.com/ChuckPeng/OpenMinis-K12/server` |
+| 服务端 | 顶层 `server/`，独立 `go.mod`。模块路径按设计写作 `github.com/ChuckPeng/OpenMinis-K12/server`。许可证 GPL-3.0，写在 `server/README.md` |
 | 管理前端 | `server/web/`，Vue 3 + Vite + TypeScript，构建结果 `go:embed` |
-| 部署 | `server/deploy/docker/`、`server/deploy/systemd/` |
+| 部署 | 所有者用 `server/deploy/systemd/`。`server/deploy/docker/` 仍保留，作为次要产物 |
 | 工程文档 | 只写在 `docs/k12/`。上游 `docs/specs/` 编码前要读，但不在 K12 PR 里改写 |
 
 FSRS 移植自 `open-spaced-repetition/java-fsrs`（MIT）。源文件头保留原版权与 MIT 声明。NC 图谱（CC BY-NC-SA）只在运行时下载到本机私有目录，衍生映射保持 BY-NC-SA，不进 GPL 源码树，不打进 APK。

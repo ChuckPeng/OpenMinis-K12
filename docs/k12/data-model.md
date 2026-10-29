@@ -41,7 +41,7 @@ SQLite，第一天带 `family_id`。v1 只有一个家庭。敏感列用主密�
 | `pair_codes` | `code_hash`，`family_id`，`expires_at`，`used_at` | 一次性，10 分钟 |
 | `nonces` | `device_id`，`nonce`，`seen_at` | 10 分钟清理 |
 
-`config_json` 只含这些键：`stage`，`daily_limit_minutes`，`weekend_extra_minutes`（默认 30），`break_reminder_minutes`，`late_night_start`，`late_night_end`（默认 `06:00`），`reveal_policy`，`turn_limit`（默认 60），`image_limit`（默认 20），`companion_limit_minutes`（默认 15），`study_day_min_minutes`（默认 10）。不含告警阈值。
+`config_json` 只含这些键：`stage`，`daily_limit_minutes`，`weekend_extra_minutes`（默认 30），`break_reminder_minutes`，`late_night_start`，`late_night_end`（默认 `06:00`），`reveal_policy`，`turn_limit`（默认 60），`image_limit`（默认 20），`companion_limit_minutes`（默认 15），`study_day_min_minutes`（默认 10），`hotline_text`，`hotline_number`。后两键默认空字符串。不含告警阈值。热线号码只来自家长配置。
 
 ### 解锁与告警
 

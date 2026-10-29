@@ -9,8 +9,8 @@
 
 ## 决定
 
-家长自托管一个 Go 服务，产品名 OpenMinis-K12 服务端，技术标识 `openminis-k12-server`。单二进制内含 SQLite 与管理界面。Docker 与 systemd 都提供。
+家长自托管一个 Go 服务，产品名 OpenMinis-K12 服务端，技术标识 `openminis-k12-server`。单二进制内含 SQLite 与管理界面。所有者用 systemd 运行该二进制。Docker 镜像仍然发布，作为次要产物。许可证 GPL-3.0，与平板相同。
 
 ## 后果
 
-工作量在 M5a/M5b/M5c。不引入第三方加密库。许可证仍待所有者确认，建议 GPL-3.0（T-08）。
+工作量在 M5a/M5b/M5c。不引入第三方加密库。`server/README.md` 写明 GPL-3.0。

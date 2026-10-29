@@ -8,7 +8,7 @@ info:
   description: |
     平板与 OpenMinis-K12 服务端之间的契约，外加公网端口上的企微回调、签名报告链接和健康检查。
     设计基线 r16。管理 API 见 admin-api.yaml。
-    技术默认已收口，见 docs/k12/README.md。服务端许可证仍待所有者确认（建议 GPL-3.0）。
+    技术默认已收口，见 docs/k12/README.md。服务端与平板同为 GPL-3.0。
     设备接口的响应不得包含 parent_advice_json、解锁码或告警片段。
 
 servers:
@@ -1180,6 +1180,12 @@ components:
           type: integer
         study_day_min_minutes:
           type: integer
+        hotline_text:
+          type: string
+          description: 家长配置的心理援助说明。默认空。不要写死号码。
+        hotline_number:
+          type: string
+          description: 家长配置的号码。默认空。未配置时客户端不展示号码。
 
     AppUpdate:
       type: object

@@ -112,33 +112,33 @@ flowchart TB
 
 ## 部署
 
-两种部署都要能在全新主机上约 10 分钟内走完安装向导（R1）。升级时先自动备份再迁移。
+所有者的部署是 **systemd** 与原生 Linux 二进制。Docker 镜像仍然构建，给需要容器的安装使用，不作为这台部署的主路径。两种方式都要能在全新主机上约 10 分钟内走完安装向导（R1）。升级时先自动备份再迁移。文档不写主机名。
 
 ```mermaid
 flowchart TB
-  subgraph dockerDeploy["Docker"]
-    image["镜像 openminis-k12-server"]
-    volume["卷 /data"]
-    image --> volume
-  end
-  subgraph systemdDeploy["systemd"]
+  subgraph systemdDeploy["systemd 主路径"]
     binary["/usr/local/bin/openminis-k12-server"]
     lib["/var/lib/openminis-k12"]
     yaml["/etc/openminis-k12/config.yaml"]
     binary --> lib
     binary --> yaml
   end
+  subgraph dockerDeploy["Docker 次要产物"]
+    image["镜像 openminis-k12-server"]
+    volume["卷 /data"]
+    image --> volume
+  end
 ```
 
-| 项 | Docker | systemd |
+| 项 | systemd（主路径） | Docker（次要） |
 | --- | --- | --- |
-| 镜像 / 单元 | 多阶段：Node 构建前端 → Go 编译 → distroless static nonroot | `openminis-k12-server.service`；`NoNewPrivileges`、`ProtectSystem=strict`、`PrivateTmp` |
-| 用户 | 非 root | 专用系统用户 |
-| 健康检查 | 二进制子命令 `healthcheck`（镜像内无 curl） | 同左 |
-| 配置 | YAML + `OPENMINIS_K12_*` 覆盖；业务配置在库里 | 同左，文件 `/etc/openminis-k12/config.yaml` |
-| 反向代理 | 容器端口只给本机代理 | 同左。监听地址默认为回环接口 |
+| 单元 / 镜像 | `openminis-k12-server.service`；`NoNewPrivileges`、`ProtectSystem=strict`、`PrivateTmp` | 多阶段：Node 构建前端 → Go 编译 → distroless static nonroot |
+| 用户 | 专用系统用户 | 非 root |
+| 健康检查 | 二进制子命令 `healthcheck` | 同左。镜像内无 curl |
+| 配置 | `/etc/openminis-k12/config.yaml`，可用 `OPENMINIS_K12_*` 覆盖；业务配置在库里 | 同左，数据在卷 `/data` |
+| 反向代理 | 监听默认为回环接口 | 容器端口只给本机代理 |
 
-用 Docker 还是 systemd、放在哪台机器，见 T-14。产物始终包含 linux/amd64 与 linux/arm64，`CGO_ENABLED=0`。SQLite 用 `modernc.org/sqlite`，WAL。
+产物始终包含 linux/amd64 与 linux/arm64，`CGO_ENABLED=0`。SQLite 用 `modernc.org/sqlite`，WAL。许可证 GPL-3.0。
 
 ## 数据流
 
