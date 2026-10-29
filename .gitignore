@@ -167,3 +167,4 @@ deps/aot/.build-iphonesimulator/
 
 # Server admin UI
 server/web/node_modules/
+*.tsbuildinfo
