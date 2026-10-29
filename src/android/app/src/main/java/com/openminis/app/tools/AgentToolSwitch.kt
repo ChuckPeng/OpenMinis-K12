@@ -53,8 +53,10 @@ enum class AgentToolSwitch(val key: String, val defaultValue: Boolean) {
             else -> null
         }
 
-        fun isToolEnabled(context: Context, toolName: String): Boolean =
-            governing(toolName)?.isEnabled(context) ?: true
+        fun isToolEnabled(context: Context, toolName: String): Boolean {
+            if (com.openminis.k12.android.K12Gates.agentToolBlocked(toolName)) return false
+            return governing(toolName)?.isEnabled(context) ?: true
+        }
 
         // ---------------------------------------------------------------- migration
 

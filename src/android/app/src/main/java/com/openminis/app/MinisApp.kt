@@ -258,6 +258,7 @@ class MinisApp : Application(), ImageLoaderFactory {
     @OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
     override fun onCreate() {
         super.onCreate()
+        com.openminis.k12.android.K12Runtime.install(this)
         // [T-oauth-wait-fgs] Before anything can start an OAuth callback server:
         // gives it a context to keep the process out of the freezer with.
         com.openminis.app.service.OAuthWaitKeepAlive.install(this)
@@ -938,6 +939,7 @@ class MinisApp : Application(), ImageLoaderFactory {
             override fun onActivityStarted(activity: Activity) {
                 val wasBackgrounded = foregroundActivityCount == 0
                 foregroundActivityCount++
+                if (wasBackgrounded) com.openminis.k12.android.K12Runtime.onForeground()
                 if (wasBackgrounded) _isAppForegroundFlow.value = true
                 // T298: as soon as the app transitions background → foreground,
                 // clear any task-completed notifications still in the tray.
@@ -1003,6 +1005,7 @@ class MinisApp : Application(), ImageLoaderFactory {
             override fun onActivityStopped(activity: Activity) {
                 foregroundActivityCount = (foregroundActivityCount - 1).coerceAtLeast(0)
                 if (foregroundActivityCount == 0) {
+                    com.openminis.k12.android.K12Runtime.onBackground()
                     _isAppForegroundFlow.value = false
                     // [T-android-config-confirm-timeout] The user switched away
                     // while a config-confirm dialog may still be showing — nudge

@@ -9,6 +9,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -265,6 +266,7 @@ fun AppNavigation(
     initialDeepLink: DeepLinkAction? = null,
 ) {
     val context = LocalContext.current
+    val initialDeepLink = com.openminis.k12.android.K12DeepLinkMap.admit(initialDeepLink)
 
     // T219-5: use the application-scoped singleton from MinisApp so UI
     // add/remove shares state with PRootKernel and the lifecycle re-probe
@@ -278,6 +280,7 @@ fun AppNavigation(
 
     // Handle initial deep link after composition
     LaunchedEffect(initialDeepLink) {
+        if (com.openminis.k12.android.K12Gates.blockUpstreamLaunchDispatch()) return@LaunchedEffect
         when (initialDeepLink) {
             is DeepLinkAction.OpenTerminal -> {
                 navController.safeNavigate(Routes.terminal(initialDeepLink.initCommand))
@@ -348,6 +351,7 @@ fun AppNavigation(
     // settle into RESUMED before navigating; for mode 3 (Home) we don't
     // need to navigate at all so we can skip the wait entirely.
     LaunchedEffect(Unit) {
+        if (com.openminis.k12.android.K12Gates.blockUpstreamLaunchDispatch()) return@LaunchedEffect
         val hasDeepLink = initialDeepLink != null && initialDeepLink !is DeepLinkAction.Unknown
         if (hasDeepLink) return@LaunchedEffect
         val hasPendingShare =
@@ -495,6 +499,7 @@ fun AppNavigation(
     // state an onNewIntent share often arrives in. Wait for RESUMED instead.
     val shareBufferVersion by com.openminis.app.share.ShareCoordinator.bufferVersion.collectAsState()
     LaunchedEffect(shareBufferVersion) {
+        if (com.openminis.k12.android.K12Gates.blockUpstreamLaunchDispatch()) return@LaunchedEffect
         if (shareBufferVersion == 0) return@LaunchedEffect
         if (!com.openminis.app.share.ShareCoordinator.hasUnaddressedShare()) return@LaunchedEffect
         val entry = navController.currentBackStackEntry ?: return@LaunchedEffect
@@ -548,7 +553,21 @@ fun AppNavigation(
             Routes.chat(htmlShortcut.sessionId)
         }
         quickActionStart != null -> quickActionStart
-        else -> Routes.SESSION_LIST
+        else -> com.openminis.k12.android.K12Runtime.coldStartRoute()
+    }
+    DisposableEffect(navController) {
+        val listener = androidx.navigation.NavController.OnDestinationChangedListener { controller, destination, _ ->
+            com.openminis.k12.android.K12Nav.onDestinationChanged(controller, destination)
+        }
+        navController.addOnDestinationChangedListener(listener)
+        onDispose { navController.removeOnDestinationChangedListener(listener) }
+    }
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(15_000)
+            com.openminis.k12.android.K12Runtime.tick()
+            com.openminis.k12.android.K12Nav.redirectIfBlocked(navController)
+        }
     }
     NavHost(
         navController = navController,
@@ -607,6 +626,43 @@ fun AppNavigation(
             ) + fadeOut(animationSpec = tween(200, easing = EmphasizedAccelerate))
         },
     ) {
+        composable(com.openminis.k12.ColdStart.HOME) {
+            com.openminis.k12.ui.K12ChildHomeScreen(
+                onStudy = {
+                    if (!com.openminis.k12.android.K12Runtime.studyLocked()) {
+                        navController.navigate(Routes.SESSION_LIST)
+                    }
+                },
+                onParent = { navController.navigate(com.openminis.k12.ColdStart.PARENT) },
+            )
+        }
+        composable(com.openminis.k12.ColdStart.ONBOARDING) {
+            com.openminis.k12.ui.K12OnboardingScreen(
+                onFinished = {
+                    navController.navigate(com.openminis.k12.ColdStart.HOME) {
+                        popUpTo(com.openminis.k12.ColdStart.ONBOARDING) { inclusive = true }
+                    }
+                },
+            )
+        }
+        composable(com.openminis.k12.ColdStart.PARENT) {
+            com.openminis.k12.ui.K12ParentScreen(
+                onExit = {
+                    com.openminis.k12.android.K12Runtime.lock()
+                    navController.navigate(com.openminis.k12.ColdStart.HOME) {
+                        popUpTo(com.openminis.k12.ColdStart.HOME) { inclusive = true }
+                    }
+                },
+                onPermissions = { navController.navigate(com.openminis.k12.ColdStart.PERMISSIONS) },
+                onModelKey = { navController.navigate(Routes.PROVIDER_LIST) },
+                onNotificationChannel = { navController.navigate(Routes.BACKGROUND) },
+            )
+        }
+        composable(com.openminis.k12.ColdStart.PERMISSIONS) {
+            com.openminis.k12.ui.K12PermissionScreen(
+                onBack = { navController.popBackStack() },
+            )
+        }
         // [T-android-tablet-split] SESSION_LIST and CHAT both render the same
         // ChatSplitScaffold; they differ only in which session it opens with.
         //

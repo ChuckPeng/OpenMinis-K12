@@ -1,0 +1,58 @@
+name: Android
+
+on:
+  push:
+    paths-ignore:
+      - "server/**"
+  pull_request:
+    paths-ignore:
+      - "server/**"
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # ubuntu-latest already has the SDK. android-actions/setup-android@v3
+      # tries to install the removed "tools" package and fails.
+      - name: Use the hosted Android SDK
+        run: |
+          if [ -z "${ANDROID_SDK_ROOT:-}" ]; then
+            if [ -d /usr/local/lib/android/sdk ]; then
+              echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> "$GITHUB_ENV"
+              echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> "$GITHUB_ENV"
+            fi
+          else
+            echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
+          fi
+          SDK="${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}"
+          TOOLS="$(find "$SDK/cmdline-tools" -type f -name sdkmanager | head -1)"
+          yes | "$TOOLS" --sdk_root="$SDK" --licenses >/dev/null || true
+          "$TOOLS" --sdk_root="$SDK" "platforms;android-36" "build-tools;35.0.0"
+
+      - name: Signing keys stay out of git
+        run: |
+          if git ls-files | grep -Ei '(^|/)[^/]*\.(jks|keystore)$|keystore\.properties'; then
+            echo "release signing material must not be committed"
+            exit 1
+          fi
+
+      - name: Assemble and unit test
+        working-directory: src/android
+        run: |
+          # The public tree has no provider-customization.properties, so the
+          # upstream Anthropic wire snapshots cannot run here. M0 gates are
+          # covered by K12M0AcceptanceTest. A few upstream tests run as well
+          # to catch a broken hook in files they read.
+          ./gradlew :app:assembleDebug \
+            :app:testGithubDebugUnitTest \
+            --tests com.openminis.k12.K12M0AcceptanceTest \
+            --tests com.openminis.app.KeepScreenOnOrientationTest \
+            --tests com.openminis.app.agent.shell.BashismDetectorTest \
+            --stacktrace

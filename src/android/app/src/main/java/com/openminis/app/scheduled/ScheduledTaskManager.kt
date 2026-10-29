@@ -33,6 +33,9 @@ class ScheduledTaskManager(private val context: Context) {
     fun get(taskId: String): ScheduledTask? = store.get(taskId)
 
     fun create(task: ScheduledTask): ScheduledTask {
+        if (!com.openminis.k12.android.K12Gates.scheduledTaskCreateAllowed()) {
+            throw IllegalStateException("scheduled task blocked")
+        }
         // [T-android-scheduled-triggers] A relative trigger counts from now.
         val armed = if (task.usesAnchor && task.anchorMs == null) {
             task.copy(anchorMs = System.currentTimeMillis())
