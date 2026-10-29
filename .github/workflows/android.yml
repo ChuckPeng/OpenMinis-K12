@@ -19,10 +19,22 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - uses: android-actions/setup-android@v3
-
-      - name: Accept SDK licenses
-        run: yes | sdkmanager --licenses >/dev/null || true
+      # ubuntu-latest already has the SDK. android-actions/setup-android@v3
+      # tries to install the removed "tools" package and fails.
+      - name: Use the hosted Android SDK
+        run: |
+          if [ -z "${ANDROID_SDK_ROOT:-}" ]; then
+            if [ -d /usr/local/lib/android/sdk ]; then
+              echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> "$GITHUB_ENV"
+              echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> "$GITHUB_ENV"
+            fi
+          else
+            echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
+          fi
+          SDK="${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}"
+          TOOLS="$(find "$SDK/cmdline-tools" -type f -name sdkmanager | head -1)"
+          yes | "$TOOLS" --sdk_root="$SDK" --licenses >/dev/null || true
+          "$TOOLS" --sdk_root="$SDK" "platforms;android-36" "build-tools;35.0.0"
 
       - name: Signing keys stay out of git
         run: |
