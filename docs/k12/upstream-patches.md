@@ -12,7 +12,7 @@
 
 | ID | 需求 | 挂点 | 与 §15 的差异 |
 | --- | --- | --- | --- |
-| H-01 | 构建参数 | `src/android/app/build.gradle.kts`：`compileSdk = 36`、`minSdk = 26`、`targetSdk = 35`、`versionName = "1.15"`、`abiFilters` 含 `arm64-v8a`、`RELEASE_REPO = "OpenMinis/OpenMinis"` | 一致。OkHttp 4.12.0 与 `okhttp-sse`、navigation-compose 2.8.5、datastore-preferences 1.1.1 均在 |
+| H-01 | 构建参数 | `src/android/app/build.gradle.kts`：`compileSdk = 36`、`minSdk = 26`、`targetSdk = 35`、`versionName` / `versionCode`、`abiFilters` 含 `arm64-v8a`、`RELEASE_REPO` | 上游基线曾为 `versionName = "1.15"`、`versionCode = 37`、`RELEASE_REPO = "OpenMinis/OpenMinis"`。K12 改用独立 SemVer（见 `conventions.md`）：当前 `1.0.0-m0` / `1000001`，上游版本写入 `BuildConfig.K12_UPSTREAM_*` 与 `com.openminis.k12.Version`。OkHttp 4.12.0 与 `okhttp-sse`、navigation-compose 2.8.5、datastore-preferences 1.1.1 均在 |
 | H-02 | 包名与并存 | 同文件 `namespace` / `applicationId` 现为 `com.openminis.app` | K12 改为 `com.openminis.k12`（已决定）。显示名「伴学 Minis」 |
 | H-03 | 入口 | `AndroidManifest.xml` 中 `.MainActivity`，`launchMode="singleTask"`。图标别名 `MainActivityIconAuto` / `Light` / `Dark`。`MainActivity.setContent` 在 `MainActivity.kt` 约第 520 行 | 行号与设计一致。儿童外壳套在这次 `setContent` |
 | H-04 | 起始路由与 PIN 守卫 | `ui/navigation/AppNavigation.kt` 的 `object Routes`（约第 89 行）。`NavHost` 的 `startDestination` 约第 539–555 行，默认 `Routes.SESSION_LIST` | 一致。儿童主页改为新的起始路由。设计点名要守卫的路由：`SETTINGS`、`PROVIDER_LIST`、`TERMINAL`、`FILE_BROWSER`、`MCP`、`AGENT_TOOLS`、`ENV_VARS`、`NETWORK` |
@@ -68,6 +68,7 @@
 
 | ID | 文件 | 符号 | 原因 | 验收 |
 | --- | --- | --- | --- | --- |
+| H-01 | `src/android/app/build.gradle.kts` | `versionName` / `versionCode` / `K12_*` BuildConfig | K12 独立 SemVer；上游 1.15/37 记入元数据 | WP-M0-1、版本约定 |
 | H-02 | `src/android/app/build.gradle.kts` | `applicationId` | 安装身份改为 `com.openminis.k12`，可与原版并存。`namespace` 仍是 `com.openminis.app`，这样 `R` / `BuildConfig` 和清单里的相对类名都不用改 | WP-M0-1 |
 | H-02 | `src/android/app/src/main/res/values*/strings.xml` | `app_name` | 显示名「伴学 Minis」 | WP-M0-1 |
 | H-03 | `MainActivity.kt` | `setContent` | 休息提醒盖在现有内容上 | WP-M0-5、C4 |

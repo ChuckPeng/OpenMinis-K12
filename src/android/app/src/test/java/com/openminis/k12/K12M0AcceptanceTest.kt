@@ -24,19 +24,42 @@ class K12M0AcceptanceTest {
     }
 
     @Test
+    fun wpM0_1_k12SemVerIndependentOfUpstream() {
+        assertEquals("1.0.0-m0", Version.NAME)
+        assertEquals(1_000_001, Version.CODE)
+        assertTrue(Version.matchesCodeFormula())
+        assertEquals("1.15", Version.UPSTREAM_VERSION_NAME)
+        assertEquals(37, Version.UPSTREAM_VERSION_CODE)
+        assertEquals(1, Version.DEVICE_API)
+        assertEquals(1, Version.DEVICE_API_MIN)
+        assertEquals("v1.0.0-m0", Version.MILESTONE_TAG)
+        assertTrue(Version.CODE > Version.UPSTREAM_VERSION_CODE)
+    }
+
+    @Test
     fun wpM0_1_gradleAndLauncherName() {
         val gradle = moduleFile("build.gradle.kts").readText()
         assertTrue(gradle.contains("applicationId = \"com.openminis.k12\""))
         assertTrue(gradle.contains("namespace = \"com.openminis.app\""))
         assertTrue(gradle.contains("ChuckPeng/OpenMinis-K12"))
+        assertTrue(gradle.contains("versionName = \"1.0.0-m0\""))
+        assertTrue(gradle.contains("versionCode = 1_000_001"))
         assertFalse(gradle.contains("applicationId = \"com.openminis.app\""))
         val appName = moduleFile("src/main/res/values/strings.xml").readText()
         assertTrue(appName.contains("<string name=\"app_name\">伴学 Minis</string>"))
+        val changelog = repoFile("CHANGELOG.md")
+        assertTrue(changelog.isFile)
+        assertTrue(changelog.readText().contains("## [1.0.0-m0]"))
     }
 
     @Test
     fun wpM0_1_buildConfigApplicationId() {
         assertEquals(Identity.APPLICATION_ID, com.openminis.app.BuildConfig.APPLICATION_ID)
+        assertEquals(Version.NAME, com.openminis.app.BuildConfig.VERSION_NAME)
+        assertEquals(Version.CODE, com.openminis.app.BuildConfig.VERSION_CODE)
+        assertEquals(Version.UPSTREAM_VERSION_NAME, com.openminis.app.BuildConfig.K12_UPSTREAM_VERSION_NAME)
+        assertEquals(Version.UPSTREAM_VERSION_CODE, com.openminis.app.BuildConfig.K12_UPSTREAM_VERSION_CODE)
+        assertEquals(Version.DEVICE_API, com.openminis.app.BuildConfig.K12_DEVICE_API)
     }
 
     @Test

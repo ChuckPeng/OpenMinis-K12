@@ -46,8 +46,10 @@ android {
         applicationId = "com.openminis.k12"
         minSdk = 26
         targetSdk = 35
-        versionCode = 37
-        versionName = "1.15"
+        // K12 SemVer — independent of upstream. See docs/k12/conventions.md
+        // and com.openminis.k12.Version. Upstream baseline was 1.15 / 37.
+        versionCode = 1_000_001
+        versionName = "1.0.0-m0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -57,6 +59,10 @@ android {
         // `release`. Kept separate from BuildConfig.DEBUG so a non-debuggable
         // build can still carry the tooling.
         buildConfigField("boolean", "DEV_TOOLS", "false")
+        buildConfigField("String", "K12_UPSTREAM_VERSION_NAME", "\"1.15\"")
+        buildConfigField("int", "K12_UPSTREAM_VERSION_CODE", "37")
+        buildConfigField("int", "K12_DEVICE_API", "1")
+        buildConfigField("int", "K12_DEVICE_API_MIN", "1")
 
         // System prompt prefix required by Anthropic for Claude Code OAuth
         // credentials. Empty in the public mirror (see provider-customization.properties).
