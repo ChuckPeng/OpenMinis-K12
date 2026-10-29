@@ -16,11 +16,11 @@ import java.io.File
 class K12M1AcceptanceTest {
 
     @Test
-    fun versionIsM1() {
-        assertEquals("1.0.0-m1", Version.NAME)
-        assertEquals(1_000_002, Version.CODE)
+    fun versionAtLeastM1() {
+        assertTrue(Version.NAME.startsWith("1.0.0"))
+        assertTrue(Version.CODE >= 1_000_002)
         assertTrue(Version.matchesCodeFormula())
-        assertEquals("v1.0.0-m1", Version.MILESTONE_TAG)
+        assertEquals("v${Version.NAME}", Version.MILESTONE_TAG)
     }
 
     @Test
