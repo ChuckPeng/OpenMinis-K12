@@ -61,3 +61,28 @@
 ## 合并上游
 
 每月单独分支合并 `OpenMinis/OpenMinis`。冲突热点是 `ChatViewModel.kt` 与 `AppNavigation.kt`。挂钩若行号变化，更新本表，不把 K12 逻辑扩进这两个文件。
+
+## M0 已接入
+
+逻辑在 `com.openminis.k12`。下表是这次实际改到的上游符号。
+
+| ID | 文件 | 符号 | 原因 | 验收 |
+| --- | --- | --- | --- | --- |
+| H-02 | `src/android/app/build.gradle.kts` | `applicationId` | 安装身份改为 `com.openminis.k12`，可与原版并存。`namespace` 仍是 `com.openminis.app`，这样 `R` / `BuildConfig` 和清单里的相对类名都不用改 | WP-M0-1 |
+| H-02 | `src/android/app/src/main/res/values*/strings.xml` | `app_name` | 显示名「伴学 Minis」 | WP-M0-1 |
+| H-03 | `MainActivity.kt` | `setContent` | 休息提醒盖在现有内容上 | WP-M0-5、C4 |
+| H-04 | `AppNavigation.kt` | `startDestination`、`NavHost` | 冷启动进入儿童主页或向导，并登记 K12 路由 | WP-M0-2、WP-M0-6 |
+| H-04 | `AppNavigation.kt` | `OnDestinationChangedListener` | 未解锁时弹回受守卫路由；回到儿童界面即上锁 | E1、F1 |
+| H-05 | `MainActivity.kt`、`AppNavigation.kt` | `DeepLinkHandler.parse` 的消费处 | 儿童模式丢弃会绕过主页的深链 | F1 |
+| H-06 | `ShareReceiverActivity`、`WebAppActivity`、`OAuthRedirectActivity` | `onCreate` | 儿童模式直接结束这三条旁路 | F1 |
+| H-07 | `AgentToolSwitch.kt` | `isToolEnabled` | 儿童模式关掉 `browser_use`。实现不删 | F2 |
+| H-08 | `OffloadGate.kt` | `allow` | 儿童模式在门上拒绝。各 handler 不删 | F2 |
+| H-08 | `NativeOffload.kt` | `handleClient` | 没走 `OffloadGate` 的命令（设备信息、调试、定时任务等）同样拒绝。听说放行 | F2 |
+| H-11 | `MinisApp.kt` | `onActivityStarted` / `onActivityStopped` | 只记本进程前后台，作为本 App 时长 | E3、C4 |
+| H-14 | `build.gradle.kts`、`UpdateChecker.kt` | `RELEASE_REPO`、`RELEASES_URL`、`AUTO_UPDATE_CHECK` | 更新仓库改到本 fork。自动检查先关掉，自托管清单在 M5b | WP-M0-8 |
+| H-01 | `build.gradle.kts`、`src/rcloneStub` | rclone 依赖 | `rclone.aar` 不进 git。没有这份产物时改编译同包名的占位类，保证 CI 能汇编和跑单测。有 aar 时不用占位类 | WP-M0-8 |
+| H-16 | `ScheduledTaskManager.kt` | `create` | 儿童模式拒绝创建定时任务 | F2 |
+
+`ChatViewModel` 在 M0 不加委托。供应商协议、`UsageRecord`、`RestrictedSettingsManager` 未改。
+
+公开树没有 `provider-customization.properties`。依赖那份私有提示词的上游快照测试在本仓库跑不起来，CI 不把它们算进 M0 门槛。

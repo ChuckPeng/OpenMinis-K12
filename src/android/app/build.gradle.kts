@@ -22,6 +22,16 @@ val appCustomization = Properties().apply {
 fun customizationValue(key: String): String =
     (appCustomization.getProperty(key) ?: "").replace("\"", "\\\"")
 
+// Release signing stays off the tree. CI and local debug builds use the debug
+// keystore. A release build picks up OPENMINIS_K12_* or keystore.properties.
+val k12Signing = Properties().apply {
+    val f = rootProject.file("keystore.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+fun k12Sign(env: String, prop: String): String? =
+    System.getenv(env)?.takeIf { it.isNotBlank() }
+        ?: k12Signing.getProperty(prop)?.takeIf { it.isNotBlank() }
+
 android {
     namespace = "com.openminis.app"
     // [T-android-dynamic-island] Bumped 35→36 so the Android 16 (Baklava)
@@ -33,7 +43,7 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.openminis.app"
+        applicationId = "com.openminis.k12"
         minSdk = 26
         targetSdk = 35
         versionCode = 37
@@ -63,7 +73,7 @@ android {
         // prerelease flag and cut a tag at its first '-') see them as version
         // 0 and never offer them. UPDATE_CHANNEL is the channel a fresh
         // install starts on; the user can switch to beta in About.
-        buildConfigField("String", "RELEASE_REPO", "\"OpenMinis/OpenMinis\"")
+        buildConfigField("String", "RELEASE_REPO", "\"ChuckPeng/OpenMinis-K12\"")
         buildConfigField("String", "UPDATE_CHANNEL", "\"stable\"")
 
         ndk {
@@ -82,6 +92,18 @@ android {
         cmake {
             path = file("src/main/cpp/CMakeLists.txt")
             version = "3.22.1"
+        }
+    }
+
+    val k12Store = k12Sign("OPENMINIS_K12_KEYSTORE", "storeFile")
+    signingConfigs {
+        if (k12Store != null) {
+            create("k12Release") {
+                storeFile = file(k12Store)
+                storePassword = k12Sign("OPENMINIS_K12_KEYSTORE_PASSWORD", "storePassword")
+                keyAlias = k12Sign("OPENMINIS_K12_KEY_ALIAS", "keyAlias")
+                keyPassword = k12Sign("OPENMINIS_K12_KEY_PASSWORD", "keyPassword")
+            }
         }
     }
 
@@ -126,14 +148,19 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (k12Store != null) {
+                signingConfigs.getByName("k12Release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 
     // [T15-channels] Where a build is distributed. Same applicationId, same
     // signing and same versionCode for both, so either installs over the other.
-    // - github: the APK attached to GitHub Releases. Checks for updates on its
-    //   own (ON_START, throttled) and shows the update badges.
+    // - github: the APK attached to GitHub Releases. Upstream checks for updates
+    //   on its own; this fork leaves AUTO_UPDATE_CHECK off until the self-hosted
+    //   channel exists.
     // - store: the app-store build (AAB). Never checks on its own and never
     //   shows a badge; About's manual "Check for Updates" still works and
     //   downloads + installs from GitHub like the github build.
@@ -149,7 +176,9 @@ android {
             dimension = "distribution"
             isDefault = true
             buildConfigField("boolean", "SELF_UPDATE", "true")
-            buildConfigField("boolean", "AUTO_UPDATE_CHECK", "true")
+            // Self-hosted APK updates land with the device channel. Until then
+            // the student build does not poll GitHub Releases.
+            buildConfigField("boolean", "AUTO_UPDATE_CHECK", "false")
             buildConfigField("boolean", "IN_APP_INSTALL", "true")
         }
         create("store") {
@@ -193,6 +222,14 @@ android {
         // perf shares the debug-only assets (debug-server skill bundle).
         getByName("perf") {
             assets.srcDirs("$projectDir/src/debug/assets")
+        }
+        // The gomobile rclone archive is a local build artifact (gitignored).
+        // Without it, compile the same Java package from src/rcloneStub so
+        // assemble and unit tests still run. A present archive wins.
+        if (!file("libs/rclone.aar").exists()) {
+            getByName("main") {
+                java.srcDir("src/rcloneStub/java")
+            }
         }
     }
 
@@ -432,7 +469,9 @@ dependencies {
     // `deps/build_rclone_android.sh` — the .aar is a build artifact under
     // app/libs/, not a checked-in binary. Backends are decided by
     // deps/rclone-mobile/backends/backends.go, shared with the iOS build.
-    implementation(group = "", name = "rclone", ext = "aar")
+    if (file("libs/rclone.aar").exists()) {
+        implementation(group = "", name = "rclone", ext = "aar")
+    }
 
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okhttp3:okhttp-sse:4.12.0")

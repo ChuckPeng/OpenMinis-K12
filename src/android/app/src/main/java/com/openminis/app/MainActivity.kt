@@ -508,9 +508,12 @@ class MainActivity : ComponentActivity() {
         // while inside a chat, synthesise an OpenSession deep-link so
         // the navigation stack lands on that chat instead of the
         // sessions list. T166.
-        val explicitDeepLink = DeepLinkHandler.parse(intent?.data)
+        val parsedDeepLink = DeepLinkHandler.parse(intent?.data)
+        val explicitDeepLink = com.openminis.k12.android.K12DeepLinkMap.admit(parsedDeepLink)
         val launchDeepLink = if (explicitDeepLink !is DeepLinkAction.Unknown) {
             explicitDeepLink
+        } else if (com.openminis.k12.android.K12Gates.blockUpstreamLaunchDispatch()) {
+            DeepLinkAction.Unknown
         } else {
             restoredChatSessionId
                 ?.let { DeepLinkAction.OpenSession(it) }
@@ -618,6 +621,8 @@ class MainActivity : ComponentActivity() {
                 // root-level `.sheet(item: gate.pending)`.
                 com.openminis.app.ui.settings.ConfigConfirmDialogHost()
 
+                com.openminis.k12.ui.K12BreakBannerHost()
+
                 // [FEAT-261021-05] A proxy or Tailscale that keeps failing:
                 // a floating banner over every screen (iOS ContentView).
                 com.openminis.app.ui.settings.NetworkAlertBannerHost(navController)
@@ -662,6 +667,7 @@ class MainActivity : ComponentActivity() {
             hasResumedFromBackground = true
             return
         }
+        if (com.openminis.k12.android.K12Gates.blockUpstreamLaunchDispatch()) return
         val mode = getAppearancePrefs(this).getInt(KEY_LAUNCH_SESSION, 0)
         if (mode != 2) return
         val nav = navController ?: return
@@ -737,7 +743,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleDeepLink(uri: Uri?) {
-        val action = DeepLinkHandler.parse(uri)
+        val action = com.openminis.k12.android.K12DeepLinkMap.admit(DeepLinkHandler.parse(uri))
+        if (action == null || action is DeepLinkAction.Unknown) return
         val nav = navController ?: return
         when (action) {
             is DeepLinkAction.OpenTerminal -> {

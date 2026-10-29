@@ -107,6 +107,10 @@ class WebAppActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (com.openminis.k12.android.K12Gates.blockBypassActivity(javaClass.name)) {
+            finish()
+            return
+        }
 
         // Default state: draw under system bars but keep them visible.
         // Fullscreen toggle hides them on demand. Both bars are made

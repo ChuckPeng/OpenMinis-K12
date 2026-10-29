@@ -480,6 +480,8 @@ object NativeOffloadServer {
             if (handler == null) {
                 Log.w(TAG, "no handler registered for '$name' (known=${handlers.keys})")
                 NativeOffloadResult(exitCode = 127, output = "native_offload: no handler for '$name'\n")
+            } else if (com.openminis.k12.android.K12Gates.offloadBlocked(name)) {
+                NativeOffloadResult(exitCode = 126, output = "native_offload: blocked\n")
             } else {
                 try {
                     handler.handle(NativeOffloadRequest(
