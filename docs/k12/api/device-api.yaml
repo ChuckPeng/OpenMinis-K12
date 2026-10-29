@@ -1,0 +1,1229 @@
+openapi: 3.1.0
+info:
+  title: OpenMinis-K12 设备与公网 API
+  version: 0.0.0-r16
+  license:
+    name: GPL-3.0-only
+    identifier: GPL-3.0-only
+  description: |
+    平板与 OpenMinis-K12 服务端之间的契约，外加公网端口上的企微回调、签名报告链接和健康检查。
+    设计基线 r16。管理 API 见 admin-api.yaml。
+    技术默认已收口，见 docs/k12/README.md。服务端与平板同为 GPL-3.0。
+    设备接口的响应不得包含 parent_advice_json、解锁码或告警片段。
+
+servers:
+  - url: "{origin}"
+    description: 公网端口的源。进程内是明文 HTTP，TLS 在反向代理终结。不要写入真实主机名。
+    variables:
+      origin:
+        default: http://localhost
+
+tags:
+  - name: device
+    description: 平板调用。除配对提交外均用设备签名。
+  - name: wecom
+    description: 企业微信回调。不使用设备签名。
+  - name: report
+    description: 签名短期链接。不使用设备签名。
+  - name: health
+    description: 健康检查。无认证，两个端口都有。指标不在设备端口。
+
+security:
+  - deviceSignature: []
+
+paths:
+  /api/v1/device/pair:
+    post:
+      tags: [device]
+      operationId: pairDevice
+      summary: 提交配对
+      description: |
+        认证材料是配对码，放在正文，不使用设备签名。
+        同一 child_id 已有在用平板时，须等家长在网页确认替换。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PairRequest"
+      responses:
+        "200":
+          description: 已登记，等待家长在企微确认。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PairResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+        "409":
+          description: child_id 已绑定其他在用设备，且尚未得到替换确认。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/device/pair/status:
+    get:
+      tags: [device]
+      operationId: getPairStatus
+      summary: 等待家长确认绑定
+      description: pending_confirm 与 active 的设备密钥都可以调用。其他接口只要 active。无变化时 changed 为 false。
+      parameters:
+        - $ref: "#/components/parameters/Wait"
+        - $ref: "#/components/parameters/K12Device"
+        - $ref: "#/components/parameters/K12Ts"
+        - $ref: "#/components/parameters/K12Nonce"
+        - $ref: "#/components/parameters/K12Sig"
+      responses:
+        "200":
+          description: 当前配对状态。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PairStatus"
+        "401":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/device/unlock-requests:
+    post:
+      tags: [device]
+      operationId: createUnlockRequest
+      summary: 发起解锁申请
+      description: 不含题目原文。每设备同时仅一个待处理，每小时不超过 10 个。
+      parameters:
+        - $ref: "#/components/parameters/K12Device"
+        - $ref: "#/components/parameters/K12Ts"
+        - $ref: "#/components/parameters/K12Nonce"
+        - $ref: "#/components/parameters/K12Sig"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UnlockCreate"
+      responses:
+        "201":
+          description: 已创建。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnlockCreated"
+        "401":
+          $ref: "#/components/responses/Error"
+        "409":
+          description: 已有待处理申请。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/device/unlock-requests/{id}:
+    get:
+      tags: [device]
+      operationId: waitUnlockRequest
+      summary: 长轮询解锁结果
+      description: 始终返回当前状态。批准时 grant 为签名信封。无变化时 changed 为 false。
+      parameters:
+        - $ref: "#/components/parameters/UnlockId"
+        - $ref: "#/components/parameters/Wait"
+        - $ref: "#/components/parameters/K12Device"
+        - $ref: "#/components/parameters/K12Ts"
+        - $ref: "#/components/parameters/K12Nonce"
+        - $ref: "#/components/parameters/K12Sig"
+      responses:
+        "200":
+          description: 申请的当前视图。若状态为 approved，包含授权对象。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnlockView"
+        "401":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/device/unlock-requests/{id}/ack:
+    post:
+      tags: [device]
+      operationId: ackUnlockRequest
+      summary: 确认授权已使用，或已用备用码或 PIN
+      parameters:
+        - $ref: "#/components/parameters/UnlockId"
+        - $ref: "#/components/parameters/K12Device"
+        - $ref: "#/components/parameters/K12Ts"
+        - $ref: "#/components/parameters/K12Nonce"
+        - $ref: "#/components/parameters/K12Sig"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UnlockAck"
+      responses:
+        "204":
+          description: 已关闭申请。
+        "401":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/device/alerts:
+    post:
+      tags: [device]
+      operationId: postAlert
+      summary: 上报情绪或安全告警
+      description: |
+        企微消息不含片段。snippet 为触发句前后各至多 2 句，服务端加密入库。
+        同一会话 30 分钟内同级合并由服务端完成。
+      parameters:
+        - $ref: "#/components/parameters/K12Device"
+        - $ref: "#/components/parameters/K12Ts"
+        - $ref: "#/components/parameters/K12Nonce"
+        - $ref: "#/components/parameters/K12Sig"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AlertCreate"
+      responses:
+        "202":
+          description: 已接受。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Accepted"
+        "401":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/device/events:
+    post:
+      tags: [device]
+      operationId: postEvents
+      summary: 批量上传学习事件
+      description: |
+        每批不超过 500 条。正文为 JSON，可用 Content-Encoding gzip。
+        按 event_id 幂等。返回已接收的最大 seq。缺口在后续心跳要求补传，本响应不另附缺口列表。
+      parameters:
+        - $ref: "#/components/parameters/K12Device"
+        - $ref: "#/components/parameters/K12Ts"
+        - $ref: "#/components/parameters/K12Nonce"
+        - $ref: "#/components/parameters/K12Sig"
+        - name: Content-Encoding
+          in: header
+          required: false
+          schema:
+            type: string
+            enum: [gzip, identity]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EventBatch"
+      responses:
+        "200":
+          description: 已写入的最大 seq。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventBatchResult"
+        "401":
+          $ref: "#/components/responses/Error"
+        "413":
+          description: 超过 500 条。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/device/reports:
+    get:
+      tags: [device]
+      operationId: listChildReports
+      summary: 孩子端拉取报告
+      description: 只返回本机绑定的孩子。服务端必须去掉 parent_advice_json。平板没有家长报告页。
+      parameters:
+        - name: kind
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/ReportKind"
+        - name: period
+          in: query
+          required: false
+          description: 起止日期，形如 2026-01-01/2026-01-07。
+          schema:
+            type: string
+            pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}/[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        - $ref: "#/components/parameters/K12Device"
+        - $ref: "#/components/parameters/K12Ts"
+        - $ref: "#/components/parameters/K12Nonce"
+        - $ref: "#/components/parameters/K12Sig"
+      responses:
+        "200":
+          description: 孩子可见的报告。
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [reports]
+                properties:
+                  reports:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ChildReport"
+        "401":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/device/tasks:
+    get:
+      tags: [device]
+      operationId: waitTasks
+      summary: 拉取本机孩子的任务
+      description: v1.2。只含该 child_id 的任务。钉钉验证未通过时可以没有远端任务。
+      parameters:
+        - name: since
+          in: query
+          required: false
+          description: 不透明游标，取上次响应的 next_cursor。不要自行解析。
+          schema:
+            type: string
+        - $ref: "#/components/parameters/Wait"
+        - $ref: "#/components/parameters/K12Device"
+        - $ref: "#/components/parameters/K12Ts"
+        - $ref: "#/components/parameters/K12Nonce"
+        - $ref: "#/components/parameters/K12Sig"
+      responses:
+        "200":
+          description: 当前任务。无新任务时 changed 为 false。
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [tasks, changed]
+                properties:
+                  changed:
+                    type: boolean
+                  next_cursor:
+                    type: string
+                  tasks:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/DeviceTask"
+        "401":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/device/attachments/{id}:
+    get:
+      tags: [device]
+      operationId: getAttachment
+      summary: 下载本机绑定群的作业附件
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/K12Device"
+        - $ref: "#/components/parameters/K12Ts"
+        - $ref: "#/components/parameters/K12Nonce"
+        - $ref: "#/components/parameters/K12Sig"
+      responses:
+        "200":
+          description: 文件字节。媒体类型按附件本身。
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                contentMediaType: application/octet-stream
+        "401":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/device/heartbeat:
+    post:
+      tags: [device]
+      operationId: heartbeat
+      summary: 心跳
+      description: 返回服务器时间、必要时的新配置，以及是否有新 APK。
+      parameters:
+        - $ref: "#/components/parameters/K12Device"
+        - $ref: "#/components/parameters/K12Ts"
+        - $ref: "#/components/parameters/K12Nonce"
+        - $ref: "#/components/parameters/K12Sig"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HeartbeatRequest"
+      responses:
+        "200":
+          description: 校时与配置。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HeartbeatResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/device/backups:
+    put:
+      tags: [device]
+      operationId: putBackup
+      summary: 上传端到端加密备份
+      description: |
+        正文是密文。服务端不能解密。
+        SHA-256 与 kdf_params 放在 X-K12-Content-Sha256 与 X-K12-Kdf-Params。
+      parameters:
+        - $ref: "#/components/parameters/K12Device"
+        - $ref: "#/components/parameters/K12Ts"
+        - $ref: "#/components/parameters/K12Nonce"
+        - $ref: "#/components/parameters/K12Sig"
+        - name: X-K12-Content-Sha256
+          in: header
+          required: true
+          schema:
+            type: string
+        - name: X-K12-Kdf-Params
+          in: header
+          required: true
+          description: JSON 文本，含 argon2id 的 m、t、p 与 salt。
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              contentMediaType: application/octet-stream
+      responses:
+        "204":
+          description: 已保存。
+        "401":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/device/backups/latest:
+    get:
+      tags: [device]
+      operationId: getLatestBackup
+      summary: 取回最新备份密文
+      parameters:
+        - $ref: "#/components/parameters/K12Device"
+        - $ref: "#/components/parameters/K12Ts"
+        - $ref: "#/components/parameters/K12Nonce"
+        - $ref: "#/components/parameters/K12Sig"
+      responses:
+        "200":
+          description: 密文。kdf_params 在响应头，与上传相同。
+          headers:
+            X-K12-Content-Sha256:
+              schema:
+                type: string
+            X-K12-Kdf-Params:
+              schema:
+                type: string
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                contentMediaType: application/octet-stream
+        "401":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/device/app-update:
+    get:
+      tags: [device]
+      operationId: getAppUpdate
+      summary: 版本清单
+      description: 下载后校验平台签名与 SHA-256。没有更新时 available 为 false。
+      parameters:
+        - $ref: "#/components/parameters/K12Device"
+        - $ref: "#/components/parameters/K12Ts"
+        - $ref: "#/components/parameters/K12Nonce"
+        - $ref: "#/components/parameters/K12Sig"
+      responses:
+        "200":
+          description: 清单。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppUpdate"
+        "401":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/device/diagnostics:
+    post:
+      tags: [device]
+      operationId: postDiagnostics
+      summary: 崩溃与脱敏诊断
+      description: 不得包含聊天、题目原文、图片或设备型号。
+      parameters:
+        - $ref: "#/components/parameters/K12Device"
+        - $ref: "#/components/parameters/K12Ts"
+        - $ref: "#/components/parameters/K12Nonce"
+        - $ref: "#/components/parameters/K12Sig"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Diagnostics"
+      responses:
+        "202":
+          description: 已接受。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Accepted"
+        "401":
+          $ref: "#/components/responses/Error"
+
+  /r/{link_id}:
+    get:
+      tags: [report]
+      operationId: getSignedReport
+      summary: 打开一份签名报告
+      description: |
+        HMAC-SHA256。明文为 link_id、换行、十进制 Unix 秒。默认 72 小时。
+        过期、篡改或撤销时不返回任何数字。页面要求 noindex、no-referrer、无第三方资源。
+        此路由在公网端口。其余报告与管理接口在公网端口返回 404。
+      security: []
+      parameters:
+        - name: link_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: exp
+          in: query
+          required: true
+          schema:
+            type: integer
+            description: Unix 秒。
+        - name: sig
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 单份只读报告页。
+          content:
+            text/html:
+              schema:
+                type: string
+        "404":
+          description: 无效、过期或已撤销。正文不得含指标。
+
+  /wecom/callback/{callback_key}:
+    get:
+      tags: [wecom]
+      operationId: verifyWecomCallback
+      summary: URL 校验
+      description: 1 秒内解密 echostr 并原样返回。
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/CallbackKey"
+        - name: msg_signature
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: timestamp
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: nonce
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: echostr
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "400":
+          $ref: "#/components/responses/Error"
+        "200":
+          description: 解密后的 echostr。
+          content:
+            text/plain:
+              schema:
+                type: string
+    post:
+      tags: [wecom]
+      operationId: receiveWecomCallback
+      summary: 加密回调
+      description: |
+        验 msg_signature，解密后核对 corpid。5 秒内回空包，业务异步。
+        处理 text 与 template_card_event。按 TaskId 与 EventKey 幂等。
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/CallbackKey"
+        - name: msg_signature
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: timestamp
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: nonce
+          in: query
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/xml:
+            schema:
+              type: string
+          text/xml:
+            schema:
+              type: string
+      responses:
+        "400":
+          $ref: "#/components/responses/Error"
+        "200":
+          description: 空正文。
+
+  /api/v1/device/extension-requests:
+    post:
+      tags: [device]
+      operationId: createExtensionRequest
+      summary: 申请加时
+      description: M5c。按钮为加 15 分钟、加 30 分钟或拒绝。
+      parameters:
+        - $ref: "#/components/parameters/K12Device"
+        - $ref: "#/components/parameters/K12Ts"
+        - $ref: "#/components/parameters/K12Nonce"
+        - $ref: "#/components/parameters/K12Sig"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [client_request_id, kind]
+              properties:
+                client_request_id:
+                  type: string
+                kind:
+                  type: string
+                  enum: [time, turns, images]
+      responses:
+        "201":
+          description: 已创建。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnlockCreated"
+        "401":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/device/extension-requests/{id}:
+    get:
+      tags: [device]
+      operationId: waitExtensionRequest
+      summary: 长轮询加时结果
+      parameters:
+        - $ref: "#/components/parameters/UnlockId"
+        - $ref: "#/components/parameters/Wait"
+        - $ref: "#/components/parameters/K12Device"
+        - $ref: "#/components/parameters/K12Ts"
+        - $ref: "#/components/parameters/K12Nonce"
+        - $ref: "#/components/parameters/K12Sig"
+      responses:
+        "200":
+          description: 当前状态。无变化时 changed 为 false。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnlockView"
+        "401":
+          $ref: "#/components/responses/Error"
+
+  /healthz:
+    get:
+      tags: [health]
+      operationId: getHealthz
+      summary: 存活
+      description: 两个端口都提供。无认证。正文只有状态词。容器探针优先用二进制子命令。
+      security: []
+      responses:
+        "400":
+          $ref: "#/components/responses/Error"
+        "200":
+          description: 进程在。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+
+  /readyz:
+    get:
+      tags: [health]
+      operationId: getReadyz
+      summary: 就绪
+      description: 无认证。token 字段只写 ok 或 unavailable，不写令牌本身。
+      security: []
+      responses:
+        "400":
+          $ref: "#/components/responses/Error"
+        "200":
+          description: 可以接收流量。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+        "503":
+          description: 数据库或必要依赖未就绪。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+
+components:
+  securitySchemes:
+    deviceSignature:
+      type: apiKey
+      in: header
+      name: X-K12-Sig
+      description: |
+        同时必须带 X-K12-Device、X-K12-Ts、X-K12-Nonce。
+        签名字节串为五行，用换行连接：大写方法、含查询串的路径、Unix 毫秒、32 位十六进制 nonce、正文 SHA-256 小写十六进制。
+        时间窗 ±5 分钟。OpenAPI 的 apiKey 只能声明一个头，其余头在参数里。
+
+  parameters:
+    Wait:
+      name: wait
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 0
+        maximum: 25
+        default: 25
+    UnlockId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    CallbackKey:
+      name: callback_key
+      in: path
+      required: true
+      schema:
+        type: string
+    K12Device:
+      name: X-K12-Device
+      in: header
+      required: true
+      schema:
+        type: string
+    K12Ts:
+      name: X-K12-Ts
+      in: header
+      required: true
+      description: Unix 毫秒，十进制。
+      schema:
+        type: string
+    K12Nonce:
+      name: X-K12-Nonce
+      in: header
+      required: true
+      description: 32 位小写十六进制（128 位）。缓存 10 分钟。
+      schema:
+        type: string
+    K12Sig:
+      name: X-K12-Sig
+      in: header
+      required: true
+      description: 签名内容 = 方法 ‖ 路径 ‖ 时间戳 ‖ nonce ‖ 正文 SHA-256。算法为设备密钥（Ed25519，或旧系统 ECDSA P-256）。
+      schema:
+        type: string
+
+  responses:
+    Error:
+      description: 失败。
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    Error:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: string
+      description: error 为稳定的 snake_case 代码。
+
+    Accepted:
+      type: object
+      additionalProperties: false
+      required: [id]
+      properties:
+        id:
+          type: string
+
+    PairRequest:
+      type: object
+      additionalProperties: false
+      required: [pair_code, device_pubkey, label, child_id]
+      properties:
+        pair_code:
+          type: string
+        device_pubkey:
+          type: string
+        label:
+          type: string
+          description: 家长自定标签。不要上传设备型号。
+        child_id:
+          type: string
+          format: uuid
+          description: 首次设置时生成的 UUIDv4。
+
+    PairResponse:
+      type: object
+      additionalProperties: false
+      required: [device_id, status]
+      properties:
+        device_id:
+          type: string
+        status:
+          type: string
+          enum: [pending_confirm, active, revoked]
+        code_secret_alg:
+          type: string
+          enum: [sealedbox_x25519, ecies_p256]
+        code_secret_wrapped:
+          type: string
+          description: 32 字节 codeSecret 的密封结果，base64。
+
+    PairStatus:
+      type: object
+      additionalProperties: false
+      required: [status, changed]
+      properties:
+        status:
+          type: string
+          enum: [pending_confirm, active, revoked]
+        changed:
+          type: boolean
+
+    UnlockCreate:
+      type: object
+      additionalProperties: false
+      required: [client_request_id, subject, question_hash, hints_used]
+      properties:
+        client_request_id:
+          type: string
+        subject:
+          type: string
+        question_hash:
+          type: string
+          description: 确认后题干的 SHA-256，小写十六进制。
+        hints_used:
+          type: integer
+          minimum: 0
+        reason:
+          type: string
+
+    UnlockCreated:
+      type: object
+      additionalProperties: false
+      required: [id, expires_at]
+      properties:
+        id:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+
+    Grant:
+      type: object
+      additionalProperties: false
+      required: [payload, signature]
+      properties:
+        payload:
+          $ref: "#/components/schemas/GrantPayload"
+        signature:
+          type: string
+          description: base64url，无填充。覆盖 payload 的规范化 JSON（键排序、无多余空白、UTF-8）。
+
+    GrantPayload:
+      type: object
+      additionalProperties: false
+      required: [v, grant_id, request_id, device_id, question_hash, scope, expires_at, decided_by_label]
+      properties:
+        v:
+          type: integer
+        grant_id:
+          type: string
+        request_id:
+          type: string
+        device_id:
+          type: string
+        question_hash:
+          type: string
+          description: 确认后题干的 SHA-256，小写十六进制。
+        scope:
+          type: string
+          enum: [question, minutes_15]
+        expires_at:
+          type: string
+          format: date-time
+        decided_by_label:
+          type: string
+
+    UnlockView:
+      type: object
+      additionalProperties: false
+      required: [id, status]
+      properties:
+        id:
+          type: string
+        status:
+          type: string
+          enum: [pending, approved, denied, expired, consumed]
+        changed:
+          type: boolean
+        grant:
+          $ref: "#/components/schemas/Grant"
+
+    UnlockAck:
+      type: object
+      additionalProperties: false
+      required: [method]
+      properties:
+        method:
+          type: string
+          enum: [grant, backup_code, pin, totp]
+        grant_id:
+          type: string
+
+    AlertCreate:
+      type: object
+      additionalProperties: false
+      required: [level, category, occurred_at, dedupe_key]
+      properties:
+        level:
+          type: string
+          enum: ["提示", "关注", "紧急"]
+        category:
+          type: string
+        occurred_at:
+          type: integer
+          description: UTC 毫秒。
+        dedupe_key:
+          type: string
+        snippet:
+          type: string
+          description: 触发句及前后各至多 2 句。只在 TLS 中出现，服务端再加密入库。可以没有。
+
+    EventBatch:
+      type: object
+      additionalProperties: false
+      required: [events]
+      properties:
+        events:
+          type: array
+          maxItems: 500
+          items:
+            $ref: "#/components/schemas/StudyEvent"
+
+    StudyEvent:
+      type: object
+      additionalProperties: false
+      required: [event_id, schema_version, device_id, child_id, type, occurred_at, tz, seq, payload]
+      properties:
+        event_id:
+          type: string
+          format: uuid
+          description: UUIDv7。
+        schema_version:
+          type: integer
+          minimum: 1
+        device_id:
+          type: string
+        child_id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum:
+            - stem_confirmed
+            - calc_checked
+            - session_start
+            - session_end
+            - active_span
+            - attempt
+            - hint_used
+            - answer_reveal
+            - mistake_created
+            - mistake_corrected
+            - review_done
+            - task_created
+            - task_done
+            - drill_result
+            - break
+            - limit_reached
+            - wellbeing_flag
+            - mood_checkin
+        occurred_at:
+          type: integer
+          description: UTC 毫秒。
+        tz:
+          type: string
+          description: IANA 时区名。不用于归日。
+        seq:
+          type: integer
+          minimum: 0
+        subject:
+          type: string
+        kp_ids:
+          type: array
+          items:
+            type: string
+        payload:
+          type: object
+          additionalProperties: true
+          description: |
+            只含数字、枚举与哈希。禁止题目文字、图片与聊天原文。
+            字段见 docs/k12/data-model.md。v1.1 的 drill_result 不写 score。
+
+    EventBatchResult:
+      type: object
+      additionalProperties: false
+      required: [max_seq]
+      properties:
+        max_seq:
+          type: integer
+
+    ReportKind:
+      type: string
+      enum: [daily, weekly, monthly, term, adhoc]
+
+    ChildReport:
+      type: object
+      additionalProperties: false
+      required: [id, kind, metrics_json, child_text_json, text_source]
+      description: 故意没有 parent_advice_json。家长版摘要 parent_text_json 可以有，建议不可以有。
+      properties:
+        id:
+          type: string
+        kind:
+          $ref: "#/components/schemas/ReportKind"
+        period_start:
+          type: string
+        period_end:
+          type: string
+        metrics_json:
+          type: object
+          additionalProperties: true
+        analysis_json:
+          type: object
+          additionalProperties: true
+        parent_text_json:
+          type: object
+          additionalProperties: true
+        child_text_json:
+          type: object
+          additionalProperties: true
+        text_source:
+          type: string
+          enum: [llm, template]
+        data_basis_json:
+          type: object
+          additionalProperties: true
+        metric_version:
+          type: integer
+        version:
+          type: integer
+        status:
+          type: string
+          enum: [final, revised]
+        generated_at:
+          type: string
+          format: date-time
+
+    DeviceTask:
+      type: object
+      additionalProperties: false
+      required: [id, kind, title]
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+          description: 作业、通知、待办、考试，或未结构化原文。
+        subject:
+          type: string
+        title:
+          type: string
+        detail:
+          type: string
+        due_at:
+          type: string
+          format: date-time
+        attachment_ids:
+          type: array
+          items:
+            type: string
+        confidence:
+          type: number
+
+    HeartbeatRequest:
+      type: object
+      additionalProperties: false
+      required: [app_version, config_version_applied]
+      properties:
+        app_version:
+          type: string
+        config_version_applied:
+          type: integer
+        turns:
+          type: integer
+          minimum: 0
+        images:
+          type: integer
+          minimum: 0
+        companion_minutes:
+          type: integer
+          minimum: 0
+        permission_check:
+          $ref: "#/components/schemas/PermissionCheck"
+
+    HeartbeatResponse:
+      type: object
+      additionalProperties: false
+      required: [server_time]
+      properties:
+        server_time:
+          type: string
+          format: date-time
+          description: UTC。事件的 occurred_at 与 X-K12-Ts 仍用 Unix 毫秒。
+        config_version:
+          type: integer
+        config_json:
+          $ref: "#/components/schemas/DeviceConfig"
+        app_update_available:
+          type: boolean
+
+    PermissionCheck:
+      type: object
+      additionalProperties: false
+      properties:
+        notifications_enabled:
+          type: boolean
+        battery_unrestricted:
+          type: boolean
+        background_allowed:
+          type: boolean
+        exact_alarm_allowed:
+          type: boolean
+
+    DeviceConfig:
+      type: object
+      additionalProperties: false
+      description: 仅当版本比平板已应用的更新时出现。不含告警阈值。
+      properties:
+        stage:
+          type: string
+          enum: ["小学低年级", "小学高年级", "初中", "高中"]
+        daily_limit_minutes:
+          type: integer
+        weekend_extra_minutes:
+          type: integer
+        break_reminder_minutes:
+          type: integer
+        late_night_start:
+          type: string
+        late_night_end:
+          type: string
+        reveal_policy:
+          type: object
+          additionalProperties: true
+        turn_limit:
+          type: integer
+        image_limit:
+          type: integer
+        companion_limit_minutes:
+          type: integer
+        study_day_min_minutes:
+          type: integer
+        hotline_text:
+          type: string
+          description: 家长配置的心理援助说明。默认空。不要写死号码。
+        hotline_number:
+          type: string
+          description: 家长配置的号码。默认空。未配置时客户端不展示号码。
+
+    AppUpdate:
+      type: object
+      additionalProperties: false
+      required: [available]
+      properties:
+        available:
+          type: boolean
+        version:
+          type: string
+        sha256:
+          type: string
+        url:
+          type: string
+          description: 相对公网源的路径或绝对 URL。不写死主机。
+
+    Diagnostics:
+      type: object
+      additionalProperties: false
+      required: [kind, body]
+      properties:
+        kind:
+          type: string
+          enum: [crash, log]
+        body:
+          type: string
+          description: 已脱敏文本。
+
+    Health:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok, unavailable]
+        database:
+          type: string
+        token:
+          type: string
+          description: 只写状态词，不写 token 值。
