@@ -1,0 +1,9 @@
+# Synthetic knowledge graph for CI only - not NC taxonomy blobs.
+# Format: id|title|prereqIds
+# License of this sample: CC BY-NC-SA 4.0 (fixture)
+kp.integer.add|整数加法|
+kp.integer.sub|整数减法|kp.integer.add
+kp.equation.one|一元一次方程|kp.integer.add,kp.integer.sub
+kp.equation.two|二元一次方程组|kp.equation.one
+kp.geom.area|平面图形面积|kp.integer.mul
+kp.integer.mul|整数乘法|kp.integer.add
