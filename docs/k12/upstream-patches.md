@@ -1,0 +1,61 @@
+# 上游挂钩
+
+核对对象：本仓库当前 `main`（`1a71df0`，上游 Android 1.15）。设计 §15 的行号会漂移；下表是这次核对后的位置。新增挂钩先改本表再改代码。
+
+路径均相对仓库根。包名 `com.openminis.app` 除非另注。
+
+## 允许的改动原则
+
+上游文件只做委派或路由守卫。K12 逻辑放在新包（根包暂定 `com.openminis.k12`，T-40）。不删上游工具实现。
+
+## 已核对挂点
+
+| ID | 需求 | 挂点 | 与 §15 的差异 |
+| --- | --- | --- | --- |
+| H-01 | 构建参数 | `src/android/app/build.gradle.kts`：`compileSdk = 36`、`minSdk = 26`、`targetSdk = 35`、`versionName = "1.15"`、`abiFilters` 含 `arm64-v8a`、`RELEASE_REPO = "OpenMinis/OpenMinis"` | 一致。OkHttp 4.12.0 与 `okhttp-sse`、navigation-compose 2.8.5、datastore-preferences 1.1.1 均在 |
+| H-02 | 包名与并存 | 同文件 `namespace` / `applicationId` 现为 `com.openminis.app` | K12 改为 `com.openminis.k12`（已决定）。显示名「伴学 Minis」 |
+| H-03 | 入口 | `AndroidManifest.xml` 中 `.MainActivity`，`launchMode="singleTask"`。图标别名 `MainActivityIconAuto` / `Light` / `Dark`。`MainActivity.setContent` 在 `MainActivity.kt` 约第 520 行 | 行号与设计一致。儿童外壳套在这次 `setContent` |
+| H-04 | 起始路由与 PIN 守卫 | `ui/navigation/AppNavigation.kt` 的 `object Routes`（约第 89 行）。`NavHost` 的 `startDestination` 约第 539–555 行，默认 `Routes.SESSION_LIST` | 一致。儿童主页改为新的起始路由。设计点名要守卫的路由：`SETTINGS`、`PROVIDER_LIST`、`TERMINAL`、`FILE_BROWSER`、`MCP`、`AGENT_TOOLS`、`ENV_VARS`、`NETWORK` |
+| H-05 | 深链 | `deeplink/DeepLinkHandler.kt` 的 `sealed class DeepLinkAction`（约第 47 行）。`AppNavigation` 只消费它 | **纠正**：`DeepLinkAction` 不在 `AppNavigation.kt`。`OpenTerminal`、`OpenSettingsScreen`、`CreateEnvironmentVariable`、`NewChat` / `NewVoiceChat` / `NewCameraChat` 都会绕过会话列表 |
+| H-06 | 其他入口 | `share/ShareReceiverActivity`；`webapp/WebAppActivity`（`singleInstance`）；`auth/OAuthRedirectActivity`（`singleTask`，清单约第 416 行） | 与设计一致，儿童模式须一并拦截 |
+| H-07 | 工具开关 | `tools/AgentToolSwitch.kt`：`enum class AgentToolSwitch`，`PREFS = "agent_settings"`，`governing(toolName)`。`ChatViewModel` 约第 2515、14171、16285 行读取开关 | **纠正**：没有名为 `AgentTools` 的类型。现有开关只覆盖 `browser_use`、子代理、`user_ask`。shell / 通讯录等不在这个枚举里 |
+| H-08 | offload 门 | `sandbox/offload/OffloadGate.kt` 的 `internal object OffloadGate` | 设计写 `OffloadGate`，位置在 `sandbox/offload`。儿童模式在此增加拒绝，不删各 `*OffloadHandler` |
+| H-09 | 系统提示 | `ui/chat/ChatViewModel.kt` `buildSystemPrompt()` 约第 16250 行 | 一致。只加一个委托；教法放技能 |
+| H-10 | 视觉 | `tools/ReadImageTool.kt`（`object ReadImageTool`，工具名 `read_image`）。`ChatViewModel` 约第 14156 行调用；同文件约第 2438 行说明 Vision Group | 拍题与拍目录复用这条路径，不改模型层 |
+| H-11 | 屏幕时长 | `MinisApp.kt`：`ProcessLifecycleOwner` 观察者约第 588、697 行；`registerActivityLifecycleCallbacks` 约第 936 行 | 一致。在前后台处计时与重新上锁 |
+| H-12 | 不要误用的用量 | `ui/settings/UsageStatsScreen.kt`；`data/db/UsageRecord.kt` 的 `tokenUsage` | 这是模型 token，不是屏幕时长。K12 用量另建计数 |
+| H-13 | 设置页 | `ui/settings/SettingsScreen.kt` 的 `SettingsScreen`（约第 82 行）。`data/repository/BackgroundSettingsRepository.kt` 使用 SharedPreferences | 家长区只加分组：PIN/TOTP、配对、模型 Key、catalog 拍照、解锁兜底、权限自检。报告不放这里 |
+| H-14 | 供应商 | `provider/` 与 `ui/settings` 中的供应商页。`data/UpdateChecker.kt` 读取 `BuildConfig.RELEASE_REPO` | 供应商实现不改。`RELEASE_REPO` 改为本 fork。更新通道改为自托管 APK（§19.7），不再依赖上游 GitHub Releases |
+| H-15 | 本机通知 | `notification/UserAskNotifier.kt` 是 **object**，渠道 `minis_user_ask`。`UserAskNotificationReceiver`、`BackgroundTaskNotifier` | 照此新增家长提醒渠道。清单已有 `POST_NOTIFICATIONS` |
+| H-16 | 闹钟 | `scheduled/ScheduledTaskManager.kt`、`scheduled/ScheduledTaskAlarmReceiver.kt`。清单已有 `SCHEDULE_EXACT_ALARM`、`RECEIVE_BOOT_COMPLETED` | 休息提醒可参考。**周报不在平板上跑**，由服务端生成。禁止儿童创建 shell 类定时任务 |
+| H-17 | 访问服务端 | `network/NetworkHttp.kt` 的 `object NetworkHttp`，`client(tag, base)`。清单已有 `INTERNET` | 用派生 OkHttpClient。证书指纹在配对时固定。平板不调用 qyapi |
+| H-18 | 技能 | `data/repository/SkillRepository.kt`，`MAX_SKILLS_IN_PROMPT = 20` | 安装 core + 本机 student + catalog。不覆盖用户更高版本 |
+| H-19 | 语音 | `speech/TextToSpeechManager.kt`；`speech/SpeechRecognitionManager.kt`；`speech/SpeechRecognitionEngine.kt` | 练习页直接调用，不走 shell CLI。引擎选择见 T-07 |
+| H-20 | 与 PIN 无关 | `accessibility/RestrictedSettingsManager.kt` | 只处理 Android 13+ 无障碍「受限设置」。不并入家长锁 |
+
+## 儿童模式要关掉的 Android 入口
+
+设计点名且本树存在：
+
+| 能力 | 挂点 |
+| --- | --- |
+| 终端 / shell | `Routes.TERMINAL`，深链 `DeepLinkAction.OpenTerminal` |
+| 浏览器自动化 | `AgentToolSwitch.BROWSER`；`sandbox/offload/BrowserUseOffloadHandler.kt` |
+| 通讯录 | `sandbox/offload/ContactsOffloadHandler.kt`（`OffloadGate.enforce("contacts", ...)`） |
+| 文件浏览 | `Routes.FILE_BROWSER` |
+| 定位 | `sandbox/offload/LocationOffloadHandler.kt`。产品决定不做定位，一并拒绝 |
+
+本树**没有**蓝牙控制接口，也**没有** HomeKit。不要为了设计里的这两个名字去造禁用点。
+
+其余 offload（日历、剪贴板、通知、相册、设备信息、Shizuku 等）是否一律拒绝：T-39。在 T-39 落定前，儿童模式至少拒绝上表，以及 `Routes` 里设计点名的设置/网络/MCP/工具/环境变量页。
+
+## 明确不挂钩
+
+- `provider/*` 的协议实现、默认模型、计费。
+- `UsageRecord` 的 token 账本。
+- `RestrictedSettingsManager`。
+- 上游 `docs/specs/` 的正文。
+
+## 合并上游
+
+每月单独分支合并 `OpenMinis/OpenMinis`。冲突热点是 `ChatViewModel.kt` 与 `AppNavigation.kt`。挂钩若行号变化，更新本表，不把 K12 逻辑扩进这两个文件。

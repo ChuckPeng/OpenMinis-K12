@@ -1,0 +1,1695 @@
+openapi: 3.1.0
+info:
+  title: OpenMinis-K12 管理 API
+  version: 0.0.0-r16
+  license:
+    name: GPL-3.0-only
+    identifier: GPL-3.0-only
+  description: |
+    管理端口上的 API。设计原文写 /api/admin，本文统一为 /api/v1/admin（T-25）。
+    只给了资源名的操作标了 x-k12-ambiguous（T-26）。
+    Cookie 名 k12_session、CSRF 头 X-CSRF-Token 是草案（T-27）。
+    监听端口号未定。公网端口访问这些路径必须 404。
+
+servers:
+  - url: "{origin}"
+    description: 管理端口。经反向代理以 HTTPS 对外。不要写入真实主机名。
+    variables:
+      origin:
+        default: http://localhost
+
+tags:
+  - name: session
+    description: 安装与登录。
+  - name: wecom
+    description: 企业微信配置。
+  - name: people
+    description: 孩子、设备、家长、配置。
+  - name: unlock
+    description: 解锁与告警。
+  - name: reports
+    description: 学情报告。
+  - name: dingtalk
+    description: 钉钉与抽取。v1.2。
+  - name: advice
+    description: 亲子建议条目。M5f。路径为草案。
+  - name: ops
+    description: 模板、审计、设置、备份。
+
+paths:
+  /api/v1/admin/setup:
+    post:
+      tags: [session]
+      operationId: setupAdmin
+      summary: 首次设置管理员口令
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordBody"
+      responses:
+        "204":
+          description: 已创建会话。
+        "409":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/admin/login:
+    post:
+      tags: [session]
+      operationId: loginAdmin
+      summary: 登录
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginBody"
+      responses:
+        "204":
+          description: 已登录。
+        "401":
+          $ref: "#/components/responses/Error"
+        "429":
+          description: 锁定中。
+
+  /api/v1/admin/logout:
+    post:
+      tags: [session]
+      operationId: logoutAdmin
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      summary: 退出
+      responses:
+        "204":
+          description: 会话已清除。
+
+  /api/v1/admin/wecom-apps:
+    get:
+      tags: [wecom]
+      operationId: listWecomApps
+      summary: 列出企微应用
+      responses:
+        "200":
+          description: 列表。Secret 与 AESKey 不回显。
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WecomApp"
+    put:
+      tags: [wecom]
+      operationId: putWecomApps
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      summary: 保存企微配置
+      description: 设计把 PUT 写在集合上，没有区分新建与更新（T-26）。
+      x-k12-ambiguous: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WecomAppWrite"
+      responses:
+        "200":
+          description: 已保存。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WecomApp"
+
+  /api/v1/admin/wecom-apps/{id}/test-token:
+    post:
+      tags: [wecom]
+      operationId: testWecomToken
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      summary: 测试 gettoken
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: 成功或失败原因。不得返回 token。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TestResult"
+
+  /api/v1/admin/wecom-apps/{id}/test-send:
+    post:
+      tags: [wecom]
+      operationId: testWecomSend
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      summary: 发送测试文本或测试按钮卡片
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [kind]
+              properties:
+                kind:
+                  type: string
+                  enum: [text, button_card]
+      responses:
+        "200":
+          description: 发送结果。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TestResult"
+
+  /api/v1/admin/parents:
+    get:
+      tags: [people]
+      operationId: listParents
+      summary: 接收人列表
+      x-k12-ambiguous: true
+      responses:
+        "200":
+          description: 列表。
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Parent"
+    post:
+      tags: [people]
+      operationId: createParent
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      summary: 添加接收人
+      x-k12-ambiguous: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ParentWrite"
+      responses:
+        "201":
+          description: 已创建。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Parent"
+
+  /api/v1/admin/parents/{id}:
+    put:
+      tags: [people]
+      operationId: updateParent
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      summary: 修改接收人
+      x-k12-ambiguous: true
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ParentWrite"
+      responses:
+        "200":
+          description: 已更新。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Parent"
+    delete:
+      tags: [people]
+      operationId: deleteParent
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      summary: 删除接收人
+      x-k12-ambiguous: true
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "204":
+          description: 已删除。
+
+  /api/v1/admin/children:
+    get:
+      tags: [people]
+      operationId: listChildren
+      summary: 孩子档案
+      responses:
+        "200":
+          description: 只用标签与学段。
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Child"
+    put:
+      tags: [people]
+      operationId: putChildren
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      summary: 保存孩子档案
+      description: 设计为 GET/PUT 集合（T-26）。
+      x-k12-ambiguous: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChildWrite"
+      responses:
+        "200":
+          description: 已保存。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Child"
+
+  /api/v1/admin/children/{id}/config:
+    get:
+      tags: [people]
+      operationId: getChildConfig
+      summary: 读取下发配置
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: 当前版本。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceConfig"
+    put:
+      tags: [people]
+      operationId: putChildConfig
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      summary: 更新下发配置
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              description: 已知键见 data-model.md。告警阈值是否包含见 T-24。
+      responses:
+        "200":
+          description: 新版本。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceConfig"
+
+  /api/v1/admin/children/{id}/study-data:
+    delete:
+      tags: [reports]
+      operationId: deleteStudyData
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      summary: 按日期删除学情数据
+      parameters:
+        - $ref: "#/components/parameters/Id"
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        "204":
+          description: 已删除并安排重算。
+
+  /api/v1/admin/devices:
+    get:
+      tags: [people]
+      operationId: listDevices
+      summary: 设备列表
+      x-k12-ambiguous: true
+      responses:
+        "200":
+          description: 标签、最后在线、状态、已应用配置版本。不含设备型号。
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Device"
+
+  /api/v1/admin/devices/{id}/revoke:
+    post:
+      tags: [people]
+      operationId: revokeDevice
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      summary: 吊销设备
+      description: 路径是草案。设计只要求能吊销（T-26）。
+      x-k12-ambiguous: true
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "204":
+          description: 签名立即失效。
+
+  /api/v1/admin/devices/{id}/rotate-key:
+    post:
+      tags: [people]
+      operationId: rotateDeviceKey
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      summary: 轮换密钥
+      description: 网页有此动作，路径未在接口表中（T-26）。
+      x-k12-ambiguous: true
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "202":
+          description: 已开始轮换。后续步骤未写。
+
+  /api/v1/admin/pair-codes:
+    get:
+      tags: [people]
+      operationId: listPairCodes
+      summary: 未过期的配对码
+      x-k12-ambiguous: true
+      responses:
+        "200":
+          description: 不返回可再次使用的明文旧码。新建时只显示一次。
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PairCode"
+    post:
+      tags: [people]
+      operationId: createPairCode
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      summary: 生成配对码
+      x-k12-ambiguous: true
+      responses:
+        "201":
+          description: 含一次性明文与二维码内容。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PairCodeCreated"
+
+  /api/v1/admin/unlock-requests:
+    get:
+      tags: [unlock]
+      operationId: listUnlockRequests
+      summary: 解锁记录
+      x-k12-ambiguous: true
+      parameters:
+        - $ref: "#/components/parameters/DeviceFilter"
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: date
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: 谁批准、耗时。无题目原文。
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/UnlockRow"
+
+  /api/v1/admin/alerts:
+    get:
+      tags: [unlock]
+      operationId: listAlerts
+      summary: 告警列表
+      x-k12-ambiguous: true
+      responses:
+        "200":
+          description: 不含片段。
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AlertRow"
+
+  /api/v1/admin/alerts/{id}/snippet:
+    get:
+      tags: [unlock]
+      operationId: getAlertSnippet
+      summary: 查看触发片段
+      description: 仅管理登录后。写入审计。30 天后不存在。
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: 解密后的片段。
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [text]
+                properties:
+                  text:
+                    type: string
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/admin/alerts/{id}/ack:
+    post:
+      tags: [unlock]
+      operationId: ackAlert
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      summary: 标记已知晓
+      description: 网页有已知晓。路径未在接口表中（T-26）。
+      x-k12-ambiguous: true
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "204":
+          description: 已记录 acknowledged_by。
+
+  /api/v1/admin/usage:
+    get:
+      tags: [people]
+      operationId: getUsage
+      summary: 用量
+      parameters:
+        - name: child_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: date
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: usage_daily 行。
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/UsageRow"
+
+  /api/v1/admin/reports:
+    get:
+      tags: [reports]
+      operationId: listReports
+      summary: 历史报告
+      responses:
+        "200":
+          description: 含家长建议字段。
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdminReport"
+
+  /api/v1/admin/reports/generate:
+    post:
+      tags: [reports]
+      operationId: generateReport
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      summary: 随时查看
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [child_id, period_start, period_end]
+              properties:
+                child_id:
+                  type: string
+                  format: uuid
+                period_start:
+                  type: string
+                  format: date
+                period_end:
+                  type: string
+                  format: date
+      responses:
+        "200":
+          description: 现算的报告。短于 3 天不做环比。24 小时后清理。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminReport"
+
+  /api/v1/admin/reports/{id}/links/{link_id}/revoke:
+    post:
+      tags: [reports]
+      operationId: revokeReportLink
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      summary: 撤销一条报告链接
+      parameters:
+        - $ref: "#/components/parameters/Id"
+        - name: link_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: 链接失效。
+
+  /api/v1/admin/report-settings:
+    get:
+      tags: [reports]
+      operationId: getReportSettings
+      summary: 读取报告计划
+      responses:
+        "200":
+          description: 可按孩子。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportSettings"
+    put:
+      tags: [reports]
+      operationId: putReportSettings
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      summary: 保存报告计划
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReportSettings"
+      responses:
+        "200":
+          description: 已保存。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportSettings"
+
+  /api/v1/admin/dingtalk/auth:
+    post:
+      tags: [dingtalk]
+      operationId: startDingtalkAuth
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      summary: 生成授权二维码
+      responses:
+        "200":
+          description: 二维码只在管理界面显示。
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [qr]
+                properties:
+                  qr:
+                    type: string
+                    description: 二维码内容。不记录真实账号。
+    delete:
+      tags: [dingtalk]
+      operationId: deleteDingtalkAuth
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      summary: 解除授权
+      description: 网页有解除授权。方法未写（T-26）。
+      x-k12-ambiguous: true
+      responses:
+        "204":
+          description: 令牌已清除，同步停止。
+
+  /api/v1/admin/dingtalk/auth/status:
+    get:
+      tags: [dingtalk]
+      operationId: getDingtalkAuthStatus
+      summary: 授权状态
+      responses:
+        "200":
+          description: 是否有效、到期、最近同步与错误。不含令牌。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DingtalkStatus"
+
+  /api/v1/admin/dingtalk/sync:
+    post:
+      tags: [dingtalk]
+      operationId: syncDingtalkNow
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      summary: 立即同步
+      description: 网页动作。路径未写（T-26）。
+      x-k12-ambiguous: true
+      responses:
+        "202":
+          description: 已排队。
+
+  /api/v1/admin/child-group-bindings:
+    get:
+      tags: [dingtalk]
+      operationId: listBindings
+      summary: 孩子与班级群
+      x-k12-ambiguous: true
+      responses:
+        "200":
+          description: 绑定。群名只用家长标签。
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Binding"
+    post:
+      tags: [dingtalk]
+      operationId: createBinding
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      summary: 新建绑定
+      x-k12-ambiguous: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BindingWrite"
+      responses:
+        "201":
+          description: 已创建。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Binding"
+
+  /api/v1/admin/child-group-bindings/{id}:
+    put:
+      tags: [dingtalk]
+      operationId: updateBinding
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      summary: 修改绑定
+      x-k12-ambiguous: true
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BindingWrite"
+      responses:
+        "200":
+          description: 已更新。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Binding"
+    delete:
+      tags: [dingtalk]
+      operationId: deleteBinding
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      summary: 删除绑定
+      x-k12-ambiguous: true
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "204":
+          description: 已删除。
+
+  /api/v1/admin/class-messages:
+    get:
+      tags: [dingtalk]
+      operationId: listClassMessages
+      summary: 老师消息
+      x-k12-ambiguous: true
+      responses:
+        "200":
+          description: 仅老师或管理员。
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ClassMessage"
+
+  /api/v1/admin/extracted-tasks:
+    get:
+      tags: [dingtalk]
+      operationId: listExtractedTasks
+      summary: 抽取结果
+      x-k12-ambiguous: true
+      responses:
+        "200":
+          description: 任务与投递状态。
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ExtractedTask"
+
+  /api/v1/admin/extracted-tasks/{id}:
+    put:
+      tags: [dingtalk]
+      operationId: updateExtractedTask
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      summary: 手工改正科目或截止时间
+      description: 网页允许改正。方法未写（T-26）。
+      x-k12-ambiguous: true
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExtractedTaskPatch"
+      responses:
+        "200":
+          description: 已改正。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExtractedTask"
+
+  /api/v1/admin/extracted-tasks/{id}/reextract:
+    post:
+      tags: [dingtalk]
+      operationId: reextractTask
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      summary: 重新抽取
+      description: 网页动作。路径未写（T-26）。
+      x-k12-ambiguous: true
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "202":
+          description: 已排队。
+
+  /api/v1/admin/llm:
+    get:
+      tags: [dingtalk]
+      operationId: getLlm
+      summary: 读取模型配置
+      responses:
+        "200":
+          description: 不含 API Key。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LlmConfig"
+    put:
+      tags: [dingtalk]
+      operationId: putLlm
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      summary: 保存模型配置
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LlmConfigWrite"
+      responses:
+        "204":
+          description: 已保存。Key 不回显。
+
+  /api/v1/admin/llm/test:
+    post:
+      tags: [dingtalk]
+      operationId: testLlm
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      summary: 用示例通知试抽取
+      description: 示例由产品提供，不得使用真实班级内容。
+      responses:
+        "200":
+          description: 通过 Schema 的 JSON，或失败原因。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TestResult"
+
+  /api/v1/admin/advice-entries:
+    get:
+      tags: [advice]
+      operationId: listAdviceEntries
+      summary: 浏览条目库
+      description: 路径未在设计接口表中（T-26）。M5f。
+      x-k12-ambiguous: true
+      responses:
+        "200":
+          description: 含原则标签与审核信息。
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdviceEntry"
+    post:
+      tags: [advice]
+      operationId: createAdviceEntry
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      summary: 新增家庭条目
+      x-k12-ambiguous: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdviceEntry"
+      responses:
+        "201":
+          description: 已新增。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdviceEntry"
+
+  /api/v1/admin/advice-entries/{id}:
+    put:
+      tags: [advice]
+      operationId: updateAdviceEntry
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      summary: 停用或修改条目
+      x-k12-ambiguous: true
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdviceEntry"
+      responses:
+        "200":
+          description: 已保存。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdviceEntry"
+
+  /api/v1/admin/advice-entries/export:
+    get:
+      tags: [advice]
+      operationId: exportAdviceEntries
+      summary: 导出 YAML
+      x-k12-ambiguous: true
+      responses:
+        "200":
+          description: YAML 文本。
+          content:
+            application/yaml:
+              schema:
+                type: string
+
+  /api/v1/admin/advice-entries/import:
+    post:
+      tags: [advice]
+      operationId: importAdviceEntries
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      summary: 导入 YAML
+      x-k12-ambiguous: true
+      requestBody:
+        required: true
+        content:
+          application/yaml:
+            schema:
+              type: string
+      responses:
+        "204":
+          description: 校验通过并加载。失败则沿用上一版。
+
+  /api/v1/admin/schedules:
+    get:
+      tags: [ops]
+      operationId: listSchedules
+      summary: 推送计划
+      x-k12-ambiguous: true
+      responses:
+        "200":
+          description: cron 与种类。
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Schedule"
+    put:
+      tags: [ops]
+      operationId: putSchedules
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      summary: 保存推送计划
+      x-k12-ambiguous: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: "#/components/schemas/Schedule"
+      responses:
+        "204":
+          description: 已保存。
+
+  /api/v1/admin/templates:
+    get:
+      tags: [ops]
+      operationId: listTemplates
+      summary: 消息模板
+      x-k12-ambiguous: true
+      responses:
+        "200":
+          description: Go text/template 与变量白名单。
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Template"
+    put:
+      tags: [ops]
+      operationId: putTemplates
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      summary: 保存消息模板
+      x-k12-ambiguous: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: "#/components/schemas/Template"
+      responses:
+        "204":
+          description: 已保存。
+
+  /api/v1/admin/audit:
+    get:
+      tags: [ops]
+      operationId: listAudit
+      summary: 审计
+      x-k12-ambiguous: true
+      responses:
+        "200":
+          description: 只读。
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AuditRow"
+
+  /api/v1/admin/logs:
+    get:
+      tags: [ops]
+      operationId: listLogs
+      summary: 运行日志与队列
+      x-k12-ambiguous: true
+      responses:
+        "200":
+          description: 已脱敏。
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /api/v1/admin/settings:
+    get:
+      tags: [ops]
+      operationId: getSettings
+      summary: 运行设置
+      x-k12-ambiguous: true
+      responses:
+        "200":
+          description: 保留期、限流、时区、公网地址、可信代理。不含密钥明文。
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+    put:
+      tags: [ops]
+      operationId: putSettings
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      summary: 保存运行设置
+      x-k12-ambiguous: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "204":
+          description: 已保存。
+
+  /api/v1/admin/backup:
+    post:
+      tags: [ops]
+      operationId: downloadServerBackup
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      summary: 下载服务端备份
+      description: 方法未写（T-26）。主密钥不在文件内。
+      x-k12-ambiguous: true
+      responses:
+        "200":
+          description: 加密备份包。
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                contentMediaType: application/octet-stream
+
+  /api/v1/admin/restore:
+    post:
+      tags: [ops]
+      operationId: restoreServerBackup
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      summary: 上传并恢复
+      x-k12-ambiguous: true
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              contentMediaType: application/octet-stream
+      responses:
+        "202":
+          description: 已接受。恢复步骤的确认流程未写。
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: k12_session
+      description: 草案名（T-27）。HttpOnly、SameSite=Strict。HTTPS 时加 Secure。
+    csrfHeader:
+      type: apiKey
+      in: header
+      name: X-CSRF-Token
+      description: 草案名（T-27）。设计只要求头或表单令牌。
+
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    DeviceFilter:
+      name: device_id
+      in: query
+      required: false
+      schema:
+        type: string
+
+  responses:
+    Error:
+      description: 失败。字段是占位（T-28）。
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    Error:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    PasswordBody:
+      type: object
+      additionalProperties: false
+      required: [password]
+      properties:
+        password:
+          type: string
+          description: 强口令规则见 T-27。
+
+    LoginBody:
+      type: object
+      additionalProperties: false
+      required: [username, password]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+
+    TestResult:
+      type: object
+      additionalProperties: false
+      required: [ok]
+      properties:
+        ok:
+          type: boolean
+        detail:
+          type: string
+
+    WecomApp:
+      type: object
+      additionalProperties: false
+      required: [id, agentid, callback_key, enabled]
+      properties:
+        id:
+          type: string
+        corpid:
+          type: string
+        agentid:
+          type: string
+        api_base_url:
+          type: string
+        callback_key:
+          type: string
+        enabled:
+          type: boolean
+        secret_set:
+          type: boolean
+        aeskey_set:
+          type: boolean
+
+    WecomAppWrite:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        corpid:
+          type: string
+        agentid:
+          type: string
+        secret:
+          type: string
+          description: 只写。空表示不修改。
+        token:
+          type: string
+        aeskey:
+          type: string
+        api_base_url:
+          type: string
+        callback_key:
+          type: string
+        enabled:
+          type: boolean
+
+    Parent:
+      type: object
+      additionalProperties: false
+      required: [id, wecom_userid, label, can_approve, channel]
+      properties:
+        id:
+          type: string
+        wecom_userid:
+          type: string
+        label:
+          type: string
+        can_approve:
+          type: boolean
+        channel:
+          type: string
+          enum: [app, plugin]
+
+    ParentWrite:
+      type: object
+      additionalProperties: false
+      required: [wecom_userid, label, can_approve, channel]
+      properties:
+        wecom_userid:
+          type: string
+        label:
+          type: string
+        can_approve:
+          type: boolean
+        channel:
+          type: string
+          enum: [app, plugin]
+
+    Child:
+      type: object
+      additionalProperties: false
+      required: [id, label, stage]
+      properties:
+        id:
+          type: string
+          format: uuid
+        label:
+          type: string
+        stage:
+          type: string
+          enum: ["小学低年级", "小学高年级", "初中", "高中"]
+        device_id:
+          type: string
+
+    ChildWrite:
+      type: object
+      additionalProperties: false
+      required: [id, label, stage]
+      properties:
+        id:
+          type: string
+          format: uuid
+        label:
+          type: string
+        stage:
+          type: string
+          enum: ["小学低年级", "小学高年级", "初中", "高中"]
+        device_id:
+          type: string
+
+    DeviceConfig:
+      type: object
+      additionalProperties: false
+      required: [version, config_json]
+      properties:
+        version:
+          type: integer
+        config_json:
+          type: object
+          additionalProperties: true
+        updated_at:
+          type: string
+          format: date-time
+
+    Device:
+      type: object
+      additionalProperties: false
+      required: [id, label, status]
+      properties:
+        id:
+          type: string
+        child_id:
+          type: string
+          format: uuid
+        label:
+          type: string
+        status:
+          type: string
+          description: 枚举未定（T-31）。
+        last_seen:
+          type: string
+          format: date-time
+        app_version:
+          type: string
+        config_version_applied:
+          type: integer
+
+    PairCode:
+      type: object
+      additionalProperties: false
+      required: [expires_at]
+      properties:
+        expires_at:
+          type: string
+          format: date-time
+        used_at:
+          type: string
+          format: date-time
+
+    PairCodeCreated:
+      type: object
+      additionalProperties: false
+      required: [code, expires_at, qr_payload]
+      properties:
+        code:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        qr_payload:
+          type: string
+          description: 含服务端地址、指纹、公钥与配对码。地址来自配置，不写死。
+
+    UnlockRow:
+      type: object
+      additionalProperties: false
+      required: [id, status]
+      properties:
+        id:
+          type: string
+        device_id:
+          type: string
+        subject:
+          type: string
+        status:
+          type: string
+        decided_by:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        decided_at:
+          type: string
+          format: date-time
+
+    AlertRow:
+      type: object
+      additionalProperties: false
+      required: [id, level, occurred_at]
+      properties:
+        id:
+          type: string
+        child_id:
+          type: string
+        level:
+          type: string
+          enum: ["提示", "关注", "紧急"]
+        category:
+          type: string
+        occurred_at:
+          type: string
+          format: date-time
+        acknowledged_by:
+          type: string
+
+    UsageRow:
+      type: object
+      additionalProperties: false
+      required: [child_id, date, turns, images]
+      properties:
+        child_id:
+          type: string
+        date:
+          type: string
+          format: date
+        turns:
+          type: integer
+        images:
+          type: integer
+        companion_minutes:
+          type: integer
+        extensions_granted:
+          type: integer
+
+    AdminReport:
+      type: object
+      additionalProperties: true
+      required: [id, child_id, kind]
+      description: 家长侧可以有 parent_advice_json。设备 API 没有该字段。
+      properties:
+        id:
+          type: string
+        child_id:
+          type: string
+        kind:
+          type: string
+          enum: [daily, weekly, monthly, term, adhoc]
+        parent_advice_json:
+          type: object
+          additionalProperties: true
+        text_source:
+          type: string
+          enum: [llm, template]
+
+    ReportSettings:
+      type: object
+      additionalProperties: true
+      description: 键见 reports 模块与 §18.8。默认值里仍有待确认项（T-12、T-13）。
+
+    DingtalkStatus:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        last_sync_at:
+          type: string
+          format: date-time
+        last_error:
+          type: string
+
+    Binding:
+      type: object
+      additionalProperties: false
+      required: [id, child_id, group_label, enabled]
+      properties:
+        id:
+          type: string
+        child_id:
+          type: string
+        child_label:
+          type: string
+        group_conv_id:
+          type: string
+        group_label:
+          type: string
+        teacher_rule:
+          type: string
+          enum: [role, list]
+        enabled:
+          type: boolean
+
+    BindingWrite:
+      type: object
+      additionalProperties: false
+      required: [child_id, group_label, teacher_rule, enabled]
+      properties:
+        child_id:
+          type: string
+        child_label:
+          type: string
+        group_conv_id:
+          type: string
+        group_label:
+          type: string
+        teacher_rule:
+          type: string
+          enum: [role, list]
+        teacher_ids:
+          type: array
+          items:
+            type: string
+        enabled:
+          type: boolean
+
+    ClassMessage:
+      type: object
+      additionalProperties: false
+      required: [id, sent_at]
+      properties:
+        id:
+          type: string
+        sender_role:
+          type: string
+        sender_label:
+          type: string
+        sent_at:
+          type: string
+          format: date-time
+        extract_status:
+          type: string
+
+    ExtractedTask:
+      type: object
+      additionalProperties: false
+      required: [id, kind, title, status]
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+        subject:
+          type: string
+        title:
+          type: string
+        due_at:
+          type: string
+          format: date-time
+        confidence:
+          type: number
+        status:
+          type: string
+
+    ExtractedTaskPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        subject:
+          type: string
+        due_at:
+          type: string
+          format: date-time
+
+    LlmConfig:
+      type: object
+      additionalProperties: false
+      required: [base_url, model, key_set]
+      properties:
+        base_url:
+          type: string
+        model:
+          type: string
+        timeout_seconds:
+          type: integer
+        key_set:
+          type: boolean
+
+    LlmConfigWrite:
+      type: object
+      additionalProperties: false
+      required: [base_url, model]
+      properties:
+        base_url:
+          type: string
+        model:
+          type: string
+        api_key:
+          type: string
+          description: 只写。空表示不修改。
+        timeout_seconds:
+          type: integer
+
+    AdviceEntry:
+      type: object
+      additionalProperties: true
+      required: [id, stages, kind, text, principle]
+      properties:
+        id:
+          type: string
+        stages:
+          type: array
+          items:
+            type: string
+        kind:
+          type: string
+          enum: [observe, do, say, avoid, activity]
+        text:
+          type: string
+        principle:
+          type: string
+        enabled:
+          type: boolean
+
+    Schedule:
+      type: object
+      additionalProperties: false
+      required: [cron, kind]
+      properties:
+        cron:
+          type: string
+        kind:
+          type: string
+
+    Template:
+      type: object
+      additionalProperties: false
+      required: [kind, template_text]
+      properties:
+        kind:
+          type: string
+        template_text:
+          type: string
+
+    AuditRow:
+      type: object
+      additionalProperties: false
+      required: [actor, action, at]
+      properties:
+        actor:
+          type: string
+        action:
+          type: string
+        target:
+          type: string
+        at:
+          type: string
+          format: date-time
+
+security:
+  - sessionCookie: []
