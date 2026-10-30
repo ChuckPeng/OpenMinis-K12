@@ -60,14 +60,28 @@ func (rt *Runtime) ListenAndServe(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	notifier := deviceapi.NewNotifier()
 	cb := &wecom.CallbackHandler{
 		Store:  rt.Store,
 		Master: rt.Master,
 		OnCard: func(ctx context.Context, app *store.WecomApp, ev wecom.CardEvent) error {
-			return wecom.HandleCardEvent(ctx, rt.Store, app, ev)
+			err := wecom.HandleCardEvent(ctx, rt.Store, app, ev)
+			if err == nil {
+				req, _ := rt.Store.GetUnlockByTaskID(ctx, ev.TaskID)
+				if req != nil {
+					notifier.Wake("unlock:" + req.ID)
+				}
+			}
+			return err
 		},
 	}
-	dev := &deviceapi.Server{Store: rt.Store, Callback: cb}
+	dev := &deviceapi.Server{
+		Cfg:      rt.Cfg,
+		Store:    rt.Store,
+		Master:   rt.Master,
+		Callback: cb,
+		Notifier: notifier,
+	}
 	adm := &admin.Server{
 		Cfg:     rt.Cfg,
 		Store:   rt.Store,

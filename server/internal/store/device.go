@@ -348,15 +348,18 @@ ON CONFLICT(device_id) DO UPDATE SET
 
 // Nonces (10 minute replay protection)
 func (s *Store) CheckAndRecordNonce(ctx context.Context, deviceID, nonce string, seenAt time.Time) (bool, error) {
-	// First purge nonces older than 10 minutes
-	cutoff := seenAt.Add(-10 * time.Minute).Format(time.RFC3339Nano)
+	// First purge nonces older than 10 minutes (always UTC RFC3339 for correct string comparison)
+	cutoff := seenAt.UTC().Add(-10 * time.Minute).Format(time.RFC3339Nano)
 	_, _ = s.DB.ExecContext(ctx, `DELETE FROM nonces WHERE seen_at < ?`, cutoff)
 
-	_, err := s.DB.ExecContext(ctx, `
+	res, err := s.DB.ExecContext(ctx, `
 INSERT INTO nonces (device_id, nonce, seen_at) VALUES (?, ?, ?)`,
 		deviceID, stringsTrim(nonce), seenAt.UTC().Format(time.RFC3339Nano))
 	if err != nil {
-		// Nonce collision / already seen
+		return false, nil
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
 		return false, nil
 	}
 	return true, nil
