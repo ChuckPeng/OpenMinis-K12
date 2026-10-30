@@ -83,12 +83,13 @@ func (rt *Runtime) ListenAndServe(ctx context.Context) error {
 		Notifier: notifier,
 	}
 	adm := &admin.Server{
-		Cfg:     rt.Cfg,
-		Store:   rt.Store,
-		Master:  rt.Master,
-		Proxies: proxies,
-		UI:      rt.UI,
-		WeCom:   wecom.NewClient(""),
+		Cfg:      rt.Cfg,
+		Store:    rt.Store,
+		Master:   rt.Master,
+		Proxies:  proxies,
+		UI:       rt.UI,
+		WeCom:    wecom.NewClient(""),
+		Notifier: notifier,
 	}
 	worker := &outbox.Worker{
 		Store: rt.Store,
