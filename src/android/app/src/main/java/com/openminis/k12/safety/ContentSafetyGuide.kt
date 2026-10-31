@@ -73,7 +73,7 @@ object ContentSafetyGuide {
         var charCount = 0
         for ((idx, s) in sentences.withIndex()) {
             charCount += s.length
-            if (charCount >= triggerIndex) {
+            if (triggerIndex < charCount) {
                 hitIdx = idx
                 break
             }
