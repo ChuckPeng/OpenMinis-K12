@@ -458,7 +458,6 @@ func (s *Server) postAlert(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		AlertID    string `json:"alert_id,omitempty"`
 		Level      string `json:"level"`
 		Category   string `json:"category"`
 		OccurredAt int64  `json:"occurred_at"`
@@ -495,10 +494,7 @@ func (s *Server) postAlert(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	alertID := req.AlertID
-	if alertID == "" {
-		alertID = uuid.NewString()
-	}
+	alertID := uuid.NewString()
 	alert := &store.Alert{
 		ID:               alertID,
 		DeviceID:         dev.ID,

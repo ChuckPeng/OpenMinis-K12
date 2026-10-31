@@ -413,7 +413,6 @@ func TestM5b_WP_B3_ContentSafetyAlerts(t *testing.T) {
 	// 1. Post emergency alert: snippet is encrypted at rest (H5)
 	nowMs := time.Now().UnixMilli()
 	alertPayload, _ := json.Marshal(map[string]interface{}{
-		"alert_id":    "alert-001",
 		"level":       "emergency",
 		"category":    "self_harm",
 		"session_id":  "sess-001",
@@ -425,10 +424,16 @@ func TestM5b_WP_B3_ContentSafetyAlerts(t *testing.T) {
 	if rec.Code != http.StatusAccepted {
 		t.Fatalf("post alert failed: %d %s", rec.Code, rec.Body.String())
 	}
+	var alertResp struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &alertResp); err != nil || alertResp.ID == "" {
+		t.Fatalf("post alert response missing id: %s", rec.Body.String())
+	}
 
 	// 2. Database check: snippet in DB must NOT match plaintext (encrypted via MasterKey)
 	var encryptedSnippet sql.NullString
-	err := h.Store.DB.QueryRowContext(context.Background(), "SELECT snippet_enc FROM alerts WHERE id = 'alert-001'").Scan(&encryptedSnippet)
+	err := h.Store.DB.QueryRowContext(context.Background(), "SELECT snippet_enc FROM alerts WHERE id = ?", alertResp.ID).Scan(&encryptedSnippet)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -437,7 +442,7 @@ func TestM5b_WP_B3_ContentSafetyAlerts(t *testing.T) {
 	}
 
 	// 3. Admin reads alert snippet -> snippet is decrypted for parent audit
-	rec = h.adminRequest(t, http.MethodGet, "/api/v1/admin/alerts/alert-001/snippet", nil)
+	rec = h.adminRequest(t, http.MethodGet, "/api/v1/admin/alerts/"+alertResp.ID+"/snippet", nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("admin get alert snippet failed: %d %s", rec.Code, rec.Body.String())
 	}
