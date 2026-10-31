@@ -216,7 +216,7 @@ android {
     testOptions {
         unitTests.isReturnDefaultValues = true
         unitTests.all {
-            filter {
+            it.filter {
                 isFailOnNoMatchingTests = false
                 includeTestsMatching("com.openminis.k12.*")
                 includeTestsMatching("com.openminis.app.KeepScreenOnOrientationTest")
