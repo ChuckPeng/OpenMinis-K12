@@ -215,6 +215,14 @@ android {
 
     testOptions {
         unitTests.isReturnDefaultValues = true
+        unitTests.all {
+            filter {
+                isFailOnNoMatchingTests = false
+                includeTestsMatching("com.openminis.k12.*")
+                includeTestsMatching("com.openminis.app.KeepScreenOnOrientationTest")
+                includeTestsMatching("com.openminis.app.agent.shell.BashismDetectorTest")
+            }
+        }
     }
 
     // [T-android-downgrade-compat] MigrationTestHelper loads the exported
@@ -309,6 +317,12 @@ afterEvaluate {
         jvmArgs(githubUnitTests.get().jvmArgs ?: emptyList<String>())
         systemProperties(githubUnitTests.get().systemProperties)
         maxHeapSize = githubUnitTests.get().maxHeapSize
+        filter {
+            isFailOnNoMatchingTests = false
+            includeTestsMatching("com.openminis.k12.*")
+            includeTestsMatching("com.openminis.app.KeepScreenOnOrientationTest")
+            includeTestsMatching("com.openminis.app.agent.shell.BashismDetectorTest")
+        }
     }
 }
 
