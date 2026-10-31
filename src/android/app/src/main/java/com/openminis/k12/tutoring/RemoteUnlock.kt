@@ -103,16 +103,17 @@ object RemoteUnlock {
 
     fun parseGrant(json: JSONObject?): Grant? {
         if (json == null) return null
+        val payload = json.optJSONObject("payload") ?: json
         return Grant(
-            v = json.optInt("v", 1),
-            grantId = json.optString("grant_id", ""),
-            requestId = json.optString("request_id", ""),
-            deviceId = json.optString("device_id", ""),
-            questionHash = json.optString("question_hash", ""),
-            scope = json.optString("scope", "question"),
-            expiresAt = json.optString("expires_at", ""),
-            decidedByLabel = json.optString("decided_by_label", ""),
-            signature = json.optString("signature", ""),
+            v = payload.optInt("v", 1),
+            grantId = payload.optString("grant_id", ""),
+            requestId = payload.optString("request_id", ""),
+            deviceId = payload.optString("device_id", ""),
+            questionHash = payload.optString("question_hash", ""),
+            scope = payload.optString("scope", "question"),
+            expiresAt = payload.optString("expires_at", ""),
+            decidedByLabel = payload.optString("decided_by_label", ""),
+            signature = json.optString("signature", payload.optString("signature", "")),
         ).takeIf { it.grantId.isNotBlank() && it.signature.isNotBlank() }
     }
 

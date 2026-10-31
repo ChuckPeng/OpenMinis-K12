@@ -265,7 +265,7 @@ func TestM5b_WP_B1_PairingAndDeviceLifecycle(t *testing.T) {
 
 	// 5. Admin approves device
 	rec = h.adminRequest(t, http.MethodPost, fmt.Sprintf("/api/v1/admin/devices/%s/approve", pairResp.DeviceID), nil)
-	if rec.Code != http.StatusOK {
+	if rec.Code != http.StatusOK && rec.Code != http.StatusNoContent {
 		t.Fatalf("approve device failed: %d %s", rec.Code, rec.Body.String())
 	}
 
@@ -277,7 +277,7 @@ func TestM5b_WP_B1_PairingAndDeviceLifecycle(t *testing.T) {
 
 	// 7. J9: Admin revokes device -> device signatures immediately invalid
 	rec = h.adminRequest(t, http.MethodPost, fmt.Sprintf("/api/v1/admin/devices/%s/revoke", pairResp.DeviceID), nil)
-	if rec.Code != http.StatusOK {
+	if rec.Code != http.StatusOK && rec.Code != http.StatusNoContent {
 		t.Fatalf("revoke device failed: %d %s", rec.Code, rec.Body.String())
 	}
 
@@ -363,15 +363,8 @@ func TestM5b_WP_B2_RemoteUnlockAndAck(t *testing.T) {
 	var pollResp struct {
 		Status string `json:"status"`
 		Grant  *struct {
-			V              int    `json:"v"`
-			GrantID        string `json:"grant_id"`
-			RequestID      string `json:"request_id"`
-			DeviceID       string `json:"device_id"`
-			QuestionHash   string `json:"question_hash"`
-			Scope          string `json:"scope"`
-			ExpiresAt      string `json:"expires_at"`
-			DecidedByLabel string `json:"decided_by_label"`
-			Signature      string `json:"signature"`
+			Payload   crypto.GrantPayload `json:"payload"`
+			Signature string              `json:"signature"`
 		} `json:"grant"`
 	}
 	_ = json.Unmarshal(rec.Body.Bytes(), &pollResp)
@@ -380,16 +373,7 @@ func TestM5b_WP_B2_RemoteUnlockAndAck(t *testing.T) {
 	}
 
 	// 5. Verify server's grant signature
-	canonical, err := crypto.CanonicalGrantPayload(crypto.GrantPayload{
-		V:              pollResp.Grant.V,
-		GrantID:        pollResp.Grant.GrantID,
-		RequestID:      pollResp.Grant.RequestID,
-		DeviceID:       pollResp.Grant.DeviceID,
-		QuestionHash:   pollResp.Grant.QuestionHash,
-		Scope:          pollResp.Grant.Scope,
-		ExpiresAt:      pollResp.Grant.ExpiresAt,
-		DecidedByLabel: pollResp.Grant.DecidedByLabel,
-	})
+	canonical, err := crypto.CanonicalGrantPayload(pollResp.Grant.Payload)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -399,10 +383,11 @@ func TestM5b_WP_B2_RemoteUnlockAndAck(t *testing.T) {
 
 	// 6. J8: Device ACKs the unlock request
 	ackBody, _ := json.Marshal(map[string]interface{}{
-		"grant_id": pollResp.Grant.GrantID,
+		"method":   "grant",
+		"grant_id": pollResp.Grant.Payload.GrantID,
 	})
 	rec = h.signedDeviceRequest(t, http.MethodPost, fmt.Sprintf("/api/v1/device/unlock-requests/%s/ack", reqID), ackBody, devID, devPriv, nil)
-	if rec.Code != http.StatusOK {
+	if rec.Code != http.StatusOK && rec.Code != http.StatusNoContent {
 		t.Fatalf("ack unlock request failed: %d %s", rec.Code, rec.Body.String())
 	}
 }
@@ -451,10 +436,10 @@ func TestM5b_WP_B3_ContentSafetyAlerts(t *testing.T) {
 		t.Fatalf("snippet in DB should be encrypted, got: %s", encryptedSnippet.String)
 	}
 
-	// 3. Admin reads alerts -> snippet is decrypted for parent audit
-	rec = h.adminRequest(t, http.MethodGet, "/api/v1/admin/alerts", nil)
+	// 3. Admin reads alert snippet -> snippet is decrypted for parent audit
+	rec = h.adminRequest(t, http.MethodGet, "/api/v1/admin/alerts/alert-001/snippet", nil)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("admin list alerts failed: %d %s", rec.Code, rec.Body.String())
+		t.Fatalf("admin get alert snippet failed: %d %s", rec.Code, rec.Body.String())
 	}
 	if !strings.Contains(rec.Body.String(), "敏感上下文测试片段两句话") {
 		t.Fatalf("admin response should contain decrypted snippet, got %s", rec.Body.String())
@@ -467,7 +452,7 @@ func TestM5b_WP_B3_ContentSafetyAlerts(t *testing.T) {
 	}
 	// Count of alerts in DB should still be 1
 	var count int
-	_ = h.Store.DB.QueryRowContext(context.Background(), "SELECT COUNT(*) FROM alerts WHERE session_id = 'sess-001'").Scan(&count)
+	_ = h.Store.DB.QueryRowContext(context.Background(), "SELECT COUNT(*) FROM alerts WHERE dedupe_key = 'sess-001:self_harm'").Scan(&count)
 	if count != 1 {
 		t.Fatalf("expected 1 alert due to deduplication, got %d", count)
 	}
