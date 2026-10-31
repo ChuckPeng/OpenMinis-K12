@@ -14,6 +14,21 @@ object ScreenTime {
     const val EXTENSION_QUANTUM_MIN = 15
     const val PARENT_IDLE_MS = 5L * 60 * 1000
 
+    /** Default daily usage quotas (WP-B-7, §19.4): 60 rounds, 20 images, 15 min companionship. */
+    const val DEFAULT_DAILY_MAX_ROUNDS = 60
+    const val DEFAULT_DAILY_MAX_IMAGES = 20
+    const val DEFAULT_DAILY_MAX_COMPANION_MINUTES = 15
+
+    data class DailyQuota(
+        val maxRounds: Int = DEFAULT_DAILY_MAX_ROUNDS,
+        val maxImages: Int = DEFAULT_DAILY_MAX_IMAGES,
+        val maxCompanionMinutes: Int = DEFAULT_DAILY_MAX_COMPANION_MINUTES,
+    ) {
+        fun isRoundsExceeded(roundsToday: Int): Boolean = roundsToday >= maxRounds
+        fun isImagesExceeded(imagesToday: Int): Boolean = imagesToday >= maxImages
+        fun isCompanionExceeded(minutesToday: Int): Boolean = minutesToday >= maxCompanionMinutes
+    }
+
     data class Limits(val dailyMin: Int, val weekendExtraMin: Int, val breakMin: Int)
 
     fun limits(stage: StudyStage?, profile: Profile): Limits {

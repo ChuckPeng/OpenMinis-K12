@@ -13,10 +13,9 @@ class K12M5aAcceptanceTest {
 
     @Test
     fun versionIsM5a() {
-        assertEquals("1.0.0-m5a", Version.NAME)
-        assertEquals(1_000_005, Version.CODE)
+        assertTrue(Version.CODE >= 1_000_005)
         assertTrue(Version.matchesCodeFormula())
-        assertEquals("v1.0.0-m5a", Version.MILESTONE_TAG)
+        assertTrue(repoFile("CHANGELOG.md").readText().contains("## [1.0.0-m5a]"))
     }
 
     @Test

@@ -126,8 +126,8 @@ jobs:
           VER="${VER#v}"
           PKG=github.com/ChuckPeng/OpenMinis-K12/server/internal/version
           LDFLAGS="-s -w"
-          # versionCode: MAJOR×1e6+MINOR×1e3+PATCH×10+STAGE (m5a STAGE=5 → 1000005)
-          CODE="${VERSION_CODE:-1000005}"
+          # versionCode: MAJOR×1e6+MINOR×1e3+PATCH×10+STAGE (m5b STAGE=6 → 1000006)
+          CODE="${VERSION_CODE:-1000006}"
           LDFLAGS="$LDFLAGS -X ${PKG}.Version=${VER}"
           LDFLAGS="$LDFLAGS -X ${PKG}.VersionCode=${CODE}"
           LDFLAGS="$LDFLAGS -X ${PKG}.GitCommit=${GITHUB_SHA}"

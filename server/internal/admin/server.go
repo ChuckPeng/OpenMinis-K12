@@ -11,6 +11,7 @@ import (
 
 	"github.com/ChuckPeng/OpenMinis-K12/server/internal/config"
 	"github.com/ChuckPeng/OpenMinis-K12/server/internal/crypto"
+	"github.com/ChuckPeng/OpenMinis-K12/server/internal/deviceapi"
 	"github.com/ChuckPeng/OpenMinis-K12/server/internal/httpx"
 	"github.com/ChuckPeng/OpenMinis-K12/server/internal/store"
 	"github.com/ChuckPeng/OpenMinis-K12/server/internal/version"
@@ -27,12 +28,13 @@ const (
 
 // Server is the admin HTTP API + embedded UI.
 type Server struct {
-	Cfg     config.Config
-	Store   *store.Store
-	Master  crypto.MasterKey
-	Proxies *httpx.TrustedProxies
-	UI      fs.FS
-	WeCom   *wecom.Client
+	Cfg      config.Config
+	Store    *store.Store
+	Master   crypto.MasterKey
+	Proxies  *httpx.TrustedProxies
+	UI       fs.FS
+	WeCom    *wecom.Client
+	Notifier *deviceapi.Notifier
 }
 
 func (s *Server) Handler() http.Handler {
@@ -49,6 +51,17 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/admin/parents", s.parents)
 	mux.HandleFunc("/api/v1/admin/parents/", s.parentsSub)
 	mux.HandleFunc("/api/v1/admin/unlock-requests", s.requireMethod("GET", s.withAuth(false, s.listUnlocks)))
+	mux.HandleFunc("/api/v1/admin/unlock-requests/", s.unlockRequestsSub)
+	mux.HandleFunc("/api/v1/admin/devices", s.requireMethod("GET", s.withAuth(false, s.listDevices)))
+	mux.HandleFunc("/api/v1/admin/devices/", s.devicesSub)
+	mux.HandleFunc("/api/v1/admin/pair-codes", s.requireMethod("POST", s.withAuth(true, s.createPairCode)))
+	mux.HandleFunc("/api/v1/admin/alerts", s.requireMethod("GET", s.withAuth(false, s.listAlerts)))
+	mux.HandleFunc("/api/v1/admin/alerts/", s.alertsSub)
+	mux.HandleFunc("/api/v1/admin/children", s.requireMethod("GET", s.withAuth(false, s.listChildren)))
+	mux.HandleFunc("/api/v1/admin/children/", s.childrenSub)
+	mux.HandleFunc("/api/v1/admin/reports", s.requireMethod("GET", s.withAuth(false, s.listReports)))
+	mux.HandleFunc("/api/v1/admin/reports/generate", s.requireMethod("POST", s.withAuth(true, s.generateReport)))
+	mux.HandleFunc("/api/v1/admin/reports/", s.reportsSub)
 	mux.HandleFunc("/api/v1/admin/audit", s.requireMethod("GET", s.withAuth(false, s.listAudit)))
 	mux.HandleFunc("/api/v1/admin/settings", s.settings)
 	mux.HandleFunc("/api/v1/admin/status", s.requireMethod("GET", s.withAuth(false, s.status)))

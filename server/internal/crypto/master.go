@@ -3,7 +3,9 @@ package crypto
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -101,3 +103,11 @@ func (k MasterKey) Open(sealed string) ([]byte, error) {
 	nonce, ct := raw[:gcm.NonceSize()], raw[gcm.NonceSize():]
 	return gcm.Open(nil, nonce, ct, nil)
 }
+
+// DeriveKey derives a sub-key from MasterKey using HMAC-SHA256.
+func (k MasterKey) DeriveKey(purpose string) []byte {
+	mac := hmac.New(sha256.New, k)
+	mac.Write([]byte(purpose))
+	return mac.Sum(nil)
+}
+
