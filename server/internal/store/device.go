@@ -93,9 +93,10 @@ type DailyAggregate struct {
 	FirstTryCorrect int    `json:"first_try_correct"`
 	HintsUsedCount  int    `json:"hints_used_count"`
 	RevealsCount    int    `json:"reveals_count"`
-	MistakesCount   int    `json:"mistakes_count"`
-	FlagsCount      int    `json:"flags_count"`
-	IsStudyDay      int    `json:"is_study_day"`
+	MistakesCount    int    `json:"mistakes_count"`
+	FlagsCount       int    `json:"flags_count"`
+	QuestionsStarted int    `json:"questions_started"`
+	IsStudyDay       int    `json:"is_study_day"`
 	MetricVersion   int    `json:"metric_version"`
 	ComputedAt      string `json:"computed_at"`
 }
@@ -557,14 +558,15 @@ FROM children ORDER BY created_at ASC`)
 }
 
 // Study Events & Aggregates
-func (s *Store) InsertStudyEvents(ctx context.Context, events []StudyEvent) (int, error) {
+func (s *Store) InsertStudyEvents(ctx context.Context, events []StudyEvent) (int, []StudyEvent, error) {
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 	defer tx.Rollback()
 
 	maxSeq := 0
+	var inserted []StudyEvent
 	for _, ev := range events {
 		if ev.Seq > maxSeq {
 			maxSeq = ev.Seq
@@ -572,7 +574,7 @@ func (s *Store) InsertStudyEvents(ctx context.Context, events []StudyEvent) (int
 		if ev.ReceivedAt == "" {
 			ev.ReceivedAt = NowUTC()
 		}
-		_, err := tx.ExecContext(ctx, `
+		res, err := tx.ExecContext(ctx, `
 INSERT OR IGNORE INTO study_event (
   event_id, child_id, device_id, type, occurred_at, local_date,
   seq, subject, kp_ids, payload_json, schema_version, received_at
@@ -580,15 +582,18 @@ INSERT OR IGNORE INTO study_event (
 			ev.EventID, ev.ChildID, ev.DeviceID, ev.Type, ev.OccurredAt, ev.LocalDate,
 			ev.Seq, ev.Subject, ev.KPIDs, ev.PayloadJSON, ev.SchemaVersion, ev.ReceivedAt)
 		if err != nil {
-			return 0, err
+			return 0, nil, err
+		}
+		if rows, _ := res.RowsAffected(); rows > 0 {
+			inserted = append(inserted, ev)
 		}
 	}
-	return maxSeq, tx.Commit()
+	return maxSeq, inserted, tx.Commit()
 }
 
 func (s *Store) UpdateDailyAggregateFromEvents(ctx context.Context, childID, localDate, subject string, events []StudyEvent) error {
 	// Calculate increments
-	var activeSec, attempts, firstCorrect, hints, reveals, mistakes, flags int
+	var activeSec, attempts, firstCorrect, hints, reveals, mistakes, flags, questionsStarted int
 	for _, ev := range events {
 		switch ev.Type {
 		case "active_span":
@@ -599,6 +604,8 @@ func (s *Store) UpdateDailyAggregateFromEvents(ctx context.Context, childID, loc
 			if err := json.Unmarshal([]byte(ev.PayloadJSON), &p); err == nil && p.End > p.Start {
 				activeSec += int((p.End - p.Start) / 1000)
 			}
+		case "question_start", "question_started", "stem_confirmed":
+			questionsStarted++
 		case "attempt":
 			attempts++
 			var p struct {
@@ -623,8 +630,8 @@ func (s *Store) UpdateDailyAggregateFromEvents(ctx context.Context, childID, loc
 INSERT INTO daily_aggregate (
   child_id, local_date, subject, active_seconds, idle_seconds,
   attempts_count, first_try_correct, hints_used_count, reveals_count,
-  mistakes_count, flags_count, is_study_day, metric_version, computed_at
-) VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, IIF(?>=600, 1, 0), 1, ?)
+  mistakes_count, flags_count, questions_started, is_study_day, metric_version, computed_at
+) VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, IIF(?>=600, 1, 0), 1, ?)
 ON CONFLICT(child_id, local_date, subject) DO UPDATE SET
   active_seconds = active_seconds + excluded.active_seconds,
   attempts_count = attempts_count + excluded.attempts_count,
@@ -633,9 +640,10 @@ ON CONFLICT(child_id, local_date, subject) DO UPDATE SET
   reveals_count = reveals_count + excluded.reveals_count,
   mistakes_count = mistakes_count + excluded.mistakes_count,
   flags_count = flags_count + excluded.flags_count,
+  questions_started = questions_started + excluded.questions_started,
   is_study_day = IIF(active_seconds + excluded.active_seconds >= 600, 1, 0),
   computed_at = excluded.computed_at`,
-		childID, localDate, subject, activeSec, attempts, firstCorrect, hints, reveals, mistakes, flags, activeSec, NowUTC())
+		childID, localDate, subject, activeSec, attempts, firstCorrect, hints, reveals, mistakes, flags, questionsStarted, activeSec, NowUTC())
 	return err
 }
 
@@ -643,7 +651,7 @@ func (s *Store) GetDailyAggregate(ctx context.Context, childID, localDate string
 	rows, err := s.DB.QueryContext(ctx, `
 SELECT child_id, local_date, subject, active_seconds, idle_seconds, attempts_count,
        first_try_correct, hints_used_count, reveals_count, mistakes_count,
-       flags_count, is_study_day, metric_version, computed_at
+       flags_count, questions_started, is_study_day, metric_version, computed_at
 FROM daily_aggregate WHERE child_id=? AND local_date=?`, childID, localDate)
 	if err != nil {
 		return nil, err
@@ -655,7 +663,7 @@ FROM daily_aggregate WHERE child_id=? AND local_date=?`, childID, localDate)
 		if err := rows.Scan(
 			&a.ChildID, &a.LocalDate, &a.Subject, &a.ActiveSeconds, &a.IdleSeconds,
 			&a.AttemptsCount, &a.FirstTryCorrect, &a.HintsUsedCount, &a.RevealsCount,
-			&a.MistakesCount, &a.FlagsCount, &a.IsStudyDay, &a.MetricVersion, &a.ComputedAt); err != nil {
+			&a.MistakesCount, &a.FlagsCount, &a.QuestionsStarted, &a.IsStudyDay, &a.MetricVersion, &a.ComputedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, a)

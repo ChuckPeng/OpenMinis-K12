@@ -53,4 +53,43 @@ object RevealAuth {
     }
 
     fun mapPinGate(result: PinResult): Boolean = result is PinResult.Accepted
+
+    fun unlockWithRemoteGrant(
+        state: TutoringState,
+        grant: Grant,
+        serverPubkey: String,
+        localDeviceId: String,
+        consumedGrantIds: MutableSet<String>,
+        verifier: GrantSignatureVerifier = DefaultGrantVerifier,
+        nowMs: Long = System.currentTimeMillis(),
+    ): Pair<TutoringState, ReduceResult> {
+        if (!TutoringMachine.canApplyForReveal(state) && !state.layer.chainComplete()) {
+            return state to ReduceResult(state, rejected = true, message = "not ready")
+        }
+        if (!RemoteUnlock.verifyGrant(grant, serverPubkey, localDeviceId, state.questionHash, consumedGrantIds, verifier)) {
+            return state to ReduceResult(state, rejected = true, message = "invalid grant")
+        }
+        consumedGrantIds.add(grant.grantId)
+        val granted = TutoringMachine.reduce(state, TutoringAction.GrantReveal(RevealMethod.REMOTE), nowMs)
+        return granted.state to granted
+    }
+
+    fun unlockWithBackupCode(
+        state: TutoringState,
+        backupVerifier: OfflineBackupCode,
+        code: String,
+        requestId: String,
+        requestCreatedAtMs: Long,
+        nowMs: Long = System.currentTimeMillis(),
+    ): Pair<TutoringState, ReduceResult> {
+        if (!TutoringMachine.canApplyForReveal(state) && !state.layer.chainComplete()) {
+            return state to ReduceResult(state, rejected = true, message = "not ready")
+        }
+        val result = backupVerifier.verify(code, requestId, state.questionHash, requestCreatedAtMs, nowMs)
+        if (result !is OfflineBackupCode.VerifyResult.Accepted) {
+            return state to ReduceResult(state, rejected = true, message = "backup code rejected: $result")
+        }
+        val granted = TutoringMachine.reduce(state, TutoringAction.GrantReveal(RevealMethod.UNLOCK_CODE), nowMs)
+        return granted.state to granted
+    }
 }

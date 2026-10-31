@@ -51,6 +51,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/admin/parents", s.parents)
 	mux.HandleFunc("/api/v1/admin/parents/", s.parentsSub)
 	mux.HandleFunc("/api/v1/admin/unlock-requests", s.requireMethod("GET", s.withAuth(false, s.listUnlocks)))
+	mux.HandleFunc("/api/v1/admin/unlock-requests/", s.unlockRequestsSub)
 	mux.HandleFunc("/api/v1/admin/devices", s.requireMethod("GET", s.withAuth(false, s.listDevices)))
 	mux.HandleFunc("/api/v1/admin/devices/", s.devicesSub)
 	mux.HandleFunc("/api/v1/admin/pair-codes", s.requireMethod("POST", s.withAuth(true, s.createPairCode)))

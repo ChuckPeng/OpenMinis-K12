@@ -111,6 +111,7 @@ CREATE TABLE IF NOT EXISTS daily_aggregate (
   reveals_count INTEGER NOT NULL DEFAULT 0,
   mistakes_count INTEGER NOT NULL DEFAULT 0,
   flags_count INTEGER NOT NULL DEFAULT 0,
+  questions_started INTEGER NOT NULL DEFAULT 0,
   is_study_day INTEGER NOT NULL DEFAULT 0,
   metric_version INTEGER NOT NULL DEFAULT 1,
   computed_at TEXT NOT NULL,

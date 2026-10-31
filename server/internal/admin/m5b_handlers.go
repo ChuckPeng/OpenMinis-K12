@@ -86,6 +86,45 @@ func (s *Server) devicesSub(w http.ResponseWriter, r *http.Request) {
 	http.NotFound(w, r)
 }
 
+func (s *Server) unlockRequestsSub(w http.ResponseWriter, r *http.Request) {
+	// e.g. /api/v1/admin/unlock-requests/{id}/decide
+	path := strings.TrimPrefix(r.URL.Path, "/api/v1/admin/unlock-requests/")
+	parts := strings.Split(path, "/")
+	if len(parts) >= 2 && parts[1] == "decide" && r.Method == http.MethodPost {
+		id := parts[0]
+		s.withAuth(true, func(w http.ResponseWriter, r *http.Request) {
+			var req struct {
+				Decision string `json:"decision"`
+				Scope    string `json:"scope"`
+			}
+			if err := httpx.DecodeJSON(r, &req); err != nil {
+				httpx.WriteError(w, http.StatusBadRequest, "bad_request", "invalid json")
+				return
+			}
+			status := "approved"
+			if strings.EqualFold(req.Decision, "deny") || strings.EqualFold(req.Decision, "denied") {
+				status = "denied"
+			}
+			ok, err := s.Store.DecideUnlock(r.Context(), id, status, s.currentUser(r), req.Scope)
+			if err != nil {
+				httpx.WriteError(w, http.StatusInternalServerError, "internal_error", err.Error())
+				return
+			}
+			if !ok {
+				httpx.WriteError(w, http.StatusConflict, "conflict", "request already decided or expired")
+				return
+			}
+			if s.Notifier != nil {
+				s.Notifier.Wake("unlock:" + id)
+			}
+			_ = s.Store.AppendAudit(r.Context(), s.currentUser(r), "decide_unlock", fmt.Sprintf("%s:%s", id, status))
+			httpx.WriteJSON(w, http.StatusOK, map[string]any{"ok": true, "status": status})
+		})(w, r)
+		return
+	}
+	http.NotFound(w, r)
+}
+
 // Pair codes: 6-digit one-time code, 10 min expiry
 func (s *Server) createPairCode(w http.ResponseWriter, r *http.Request) {
 	n, err := rand.Int(rand.Reader, big.NewInt(1000000))
@@ -116,6 +155,7 @@ func (s *Server) createPairCode(w http.ResponseWriter, r *http.Request) {
 	_ = s.Store.AppendAudit(r.Context(), s.currentUser(r), "create_pair_code", code)
 
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{
+		"code":       code,
 		"pair_code":  code,
 		"expires_at": exp,
 		"qr_payload": string(qrBytes),
@@ -419,6 +459,8 @@ func (s *Server) generateReport(w http.ResponseWriter, r *http.Request) {
 		"signed_url": signedURL,
 		"summary":    summaryText,
 		"metrics":    metricsMap,
+		"exp":        exp,
+		"sig":        sig,
 	})
 }
 

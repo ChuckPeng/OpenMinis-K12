@@ -596,16 +596,16 @@ func (s *Server) postEvents(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	maxSeq, err := s.Store.InsertStudyEvents(ctx, storeEvents)
+	maxSeq, insertedEvents, err := s.Store.InsertStudyEvents(ctx, storeEvents)
 	if err != nil {
 		httpx.WriteError(w, http.StatusInternalServerError, "internal_error", "failed to insert events")
 		return
 	}
 
-	// Update daily aggregate
-	if len(storeEvents) > 0 {
+	// Update daily aggregate for newly inserted events (idempotent)
+	if len(insertedEvents) > 0 {
 		grouped := make(map[string][]store.StudyEvent)
-		for _, e := range storeEvents {
+		for _, e := range insertedEvents {
 			key := fmt.Sprintf("%s|%s", e.LocalDate, e.Subject)
 			grouped[key] = append(grouped[key], e)
 		}
