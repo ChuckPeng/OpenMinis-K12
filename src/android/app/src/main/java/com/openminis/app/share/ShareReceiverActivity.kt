@@ -44,6 +44,10 @@ class ShareReceiverActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (com.openminis.k12.android.K12Gates.blockBypassActivity(javaClass.name)) {
+            finish()
+            return
+        }
         val items = mutableListOf<PendingShare.Item>()
         try {
             when (intent?.action) {

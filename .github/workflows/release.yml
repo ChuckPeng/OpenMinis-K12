@@ -1,0 +1,145 @@
+name: Release
+
+# Attaches APK (and server binaries when present) to version tags.
+# See docs/k12/conventions.md — tag after the milestone PR merges.
+
+on:
+  push:
+    tags:
+      - "v*"
+      - "server-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  android-apk:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Use the hosted Android SDK
+        run: |
+          if [ -z "${ANDROID_SDK_ROOT:-}" ]; then
+            if [ -d /usr/local/lib/android/sdk ]; then
+              echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> "$GITHUB_ENV"
+              echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> "$GITHUB_ENV"
+            fi
+          else
+            echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
+          fi
+          SDK="${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}"
+          TOOLS="$(find "$SDK/cmdline-tools" -type f -name sdkmanager | head -1)"
+          yes | "$TOOLS" --sdk_root="$SDK" --licenses >/dev/null || true
+          "$TOOLS" --sdk_root="$SDK" "platforms;android-36" "build-tools;35.0.0"
+
+      - name: Assemble debug APK
+        working-directory: src/android
+        run: ./gradlew :app:assembleDebug --stacktrace
+
+      - name: Assemble release APK when keystore secrets are present
+        working-directory: src/android
+        env:
+          OPENMINIS_K12_KEYSTORE_BASE64: ${{ secrets.OPENMINIS_K12_KEYSTORE_BASE64 }}
+          OPENMINIS_K12_KEYSTORE_PASSWORD: ${{ secrets.OPENMINIS_K12_KEYSTORE_PASSWORD }}
+          OPENMINIS_K12_KEY_ALIAS: ${{ secrets.OPENMINIS_K12_KEY_ALIAS }}
+          OPENMINIS_K12_KEY_PASSWORD: ${{ secrets.OPENMINIS_K12_KEY_PASSWORD }}
+        run: |
+          if [ -z "${OPENMINIS_K12_KEYSTORE_BASE64:-}" ]; then
+            echo "No keystore secrets; shipping debug APK only."
+            exit 0
+          fi
+          echo "$OPENMINIS_K12_KEYSTORE_BASE64" | base64 -d > /tmp/k12.keystore
+          export OPENMINIS_K12_KEYSTORE=/tmp/k12.keystore
+          ./gradlew :app:assembleRelease --stacktrace
+
+      - name: Stage artifacts and checksums
+        id: stage
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          OUT="$RUNNER_TEMP/dist"
+          mkdir -p "$OUT"
+          DEBUG=$(find src/android/app/build/outputs/apk/debug -name '*.apk' | head -1)
+          cp "$DEBUG" "$OUT/openminis-k12-${TAG}-debug.apk"
+          if [ -d src/android/app/build/outputs/apk/release ]; then
+            REL=$(find src/android/app/build/outputs/apk/release -name '*.apk' | head -1 || true)
+            if [ -n "${REL:-}" ]; then
+              cp "$REL" "$OUT/openminis-k12-${TAG}-release.apk"
+            fi
+          fi
+          (cd "$OUT" && sha256sum *.apk > SHA256SUMS.txt)
+          echo "out=$OUT" >> "$GITHUB_OUTPUT"
+
+      - name: Upload APK artifacts to the tag release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ steps.stage.outputs.out }}/*
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+
+  server-binaries:
+    # hashFiles is not valid in job-level if; gate inside the job instead.
+    if: startsWith(github.ref, 'refs/tags/v') || startsWith(github.ref, 'refs/tags/server-v')
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect server module
+        id: server
+        run: |
+          if [ -f server/go.mod ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "server/go.mod absent — skipping server binaries (expected before M5a)."
+          fi
+
+      - uses: actions/setup-go@v5
+        if: steps.server.outputs.present == 'true'
+        with:
+          go-version: "1.22"
+
+      - name: Build server with embedded version
+        if: steps.server.outputs.present == 'true'
+        working-directory: server
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VER="${TAG#server-}"
+          VER="${VER#v}"
+          PKG=github.com/ChuckPeng/OpenMinis-K12/server/internal/version
+          LDFLAGS="-s -w"
+          LDFLAGS="$LDFLAGS -X ${PKG}.Version=${VER}"
+          LDFLAGS="$LDFLAGS -X ${PKG}.GitCommit=${GITHUB_SHA}"
+          LDFLAGS="$LDFLAGS -X ${PKG}.UpstreamVersion=${UPSTREAM_VERSION:-unknown}"
+          out="$RUNNER_TEMP/openminis-k12-server-${VER}-${GOOS}-${GOARCH}"
+          go build -trimpath -ldflags "$LDFLAGS" -o "$out" ./cmd/openminis-k12-server
+          sha256sum "$out" | tee "$out.sha256"
+          echo "artifact=$out" >> "$GITHUB_ENV"
+          echo "checksum=$out.sha256" >> "$GITHUB_ENV"
+
+      - name: Upload server binaries to the tag release
+        if: steps.server.outputs.present == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ env.artifact }}
+            ${{ env.checksum }}
+          generate_release_notes: true

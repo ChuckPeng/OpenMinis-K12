@@ -25,6 +25,10 @@ class OAuthRedirectActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (com.openminis.k12.android.K12Gates.blockBypassActivity(javaClass.name)) {
+            finish()
+            return
+        }
 
         val uri = intent?.data
         // [T-android-oauth-log-redact] The redirect carries code + state.

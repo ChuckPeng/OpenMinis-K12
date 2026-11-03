@@ -288,7 +288,7 @@ object UpdateChecker {
     }
 
     /** Public so UI can deep-link users to manual download when GitHub is blocked. */
-    const val RELEASES_URL: String = "https://github.com/OpenMinis/OpenMinis/releases"
+    const val RELEASES_URL: String = "https://github.com/ChuckPeng/OpenMinis-K12/releases"
 
     /**
      * Stream the APK from [url] into `${cacheDir}/shared/minis-update.apk`,

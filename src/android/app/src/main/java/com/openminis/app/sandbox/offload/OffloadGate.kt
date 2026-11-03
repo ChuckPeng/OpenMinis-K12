@@ -38,6 +38,7 @@ internal object OffloadGate {
      * user to Settings → Permissions.
      */
     fun allow(toolName: String, displayName: String, sessionId: String? = null): Boolean = runBlocking {
+        if (com.openminis.k12.android.K12Gates.offloadBlocked(toolName)) return@runBlocking false
         OffloadPermissionManager.checkPermission(
             toolName,
             displayName,
