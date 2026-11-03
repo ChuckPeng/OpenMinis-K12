@@ -975,17 +975,21 @@ fun AppNavigation(
         }
 
         composable(Routes.PROVIDER_LIST) {
-            ProviderListScreen(
-                providerRepository = providerRepository,
-                onBack = { navController.safePopBackStack() },
-                onAddProvider = { navController.safeNavigate(Routes.ADD_PROVIDER) },
-                onProviderClick = { instanceId ->
-                    navController.safeNavigate(Routes.providerDetail(instanceId))
-                },
-                onVoiceServiceClick = { instanceId ->
-                    navController.safeNavigate(Routes.shadowVoiceDetail(instanceId))
-                },
-            )
+            if (com.openminis.k12.ui.k12ProviderSettingsLocked()) {
+                com.openminis.k12.ui.K12ManagedModelScreen(onBack = { navController.safePopBackStack() })
+            } else {
+                ProviderListScreen(
+                    providerRepository = providerRepository,
+                    onBack = { navController.safePopBackStack() },
+                    onAddProvider = { navController.safeNavigate(Routes.ADD_PROVIDER) },
+                    onProviderClick = { instanceId ->
+                        navController.safeNavigate(Routes.providerDetail(instanceId))
+                    },
+                    onVoiceServiceClick = { instanceId ->
+                        navController.safeNavigate(Routes.shadowVoiceDetail(instanceId))
+                    },
+                )
+            }
         }
 
         composable(
@@ -1001,32 +1005,40 @@ fun AppNavigation(
         }
 
         composable(Routes.ADD_PROVIDER) {
-            AddProviderScreen(
-                providerRepository = providerRepository,
-                onBack = { navController.safePopBackStack() },
-                onSaved = { navController.safePopBackStack() },
-            )
+            if (com.openminis.k12.ui.k12ProviderSettingsLocked()) {
+                com.openminis.k12.ui.K12ManagedModelScreen(onBack = { navController.safePopBackStack() })
+            } else {
+                AddProviderScreen(
+                    providerRepository = providerRepository,
+                    onBack = { navController.safePopBackStack() },
+                    onSaved = { navController.safePopBackStack() },
+                )
+            }
         }
 
         composable(
             route = Routes.PROVIDER_DETAIL,
             arguments = listOf(navArgument("instanceId") { type = NavType.StringType }),
         ) { backStackEntry ->
-            val instanceId = backStackEntry.arguments?.getString("instanceId") ?: return@composable
-            ProviderDetailScreen(
-                instanceId = instanceId,
-                providerRepository = providerRepository,
-                onBack = { navController.safePopBackStack() },
-                onModelEntryClick = { entryId ->
-                    navController.safeNavigate(Routes.modelEntryDetail(instanceId, entryId))
-                },
-                onAddCustomModel = {
-                    navController.safeNavigate(Routes.addCustomModel(instanceId))
-                },
-                onVoiceServiceClick = { id ->
-                    navController.safeNavigate(Routes.shadowVoiceDetail(id))
-                },
-            )
+            if (com.openminis.k12.ui.k12ProviderSettingsLocked()) {
+                com.openminis.k12.ui.K12ManagedModelScreen(onBack = { navController.safePopBackStack() })
+            } else {
+                val instanceId = backStackEntry.arguments?.getString("instanceId") ?: return@composable
+                ProviderDetailScreen(
+                    instanceId = instanceId,
+                    providerRepository = providerRepository,
+                    onBack = { navController.safePopBackStack() },
+                    onModelEntryClick = { entryId ->
+                        navController.safeNavigate(Routes.modelEntryDetail(instanceId, entryId))
+                    },
+                    onAddCustomModel = {
+                        navController.safeNavigate(Routes.addCustomModel(instanceId))
+                    },
+                    onVoiceServiceClick = { id ->
+                        navController.safeNavigate(Routes.shadowVoiceDetail(id))
+                    },
+                )
+            }
         }
 
         composable(Routes.MODEL_GROUPS) {

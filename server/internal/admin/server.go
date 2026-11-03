@@ -63,6 +63,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/admin/reports/generate", s.requireMethod("POST", s.withAuth(true, s.generateReport)))
 	mux.HandleFunc("/api/v1/admin/reports/", s.reportsSub)
 	mux.HandleFunc("/api/v1/admin/audit", s.requireMethod("GET", s.withAuth(false, s.listAudit)))
+	mux.HandleFunc("/api/v1/admin/tablet-model", s.tabletModel)
 	mux.HandleFunc("/api/v1/admin/settings", s.settings)
 	mux.HandleFunc("/api/v1/admin/status", s.requireMethod("GET", s.withAuth(false, s.status)))
 	mux.HandleFunc("/api/v1/admin/j12/simulate", s.requireMethod("POST", s.withAuth(true, s.simulateJ12)))

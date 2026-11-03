@@ -22,11 +22,11 @@
 
 错因五类：概念不清、审题错误、计算粗心、不会方法、表达不规范。另有「未判定」（不进占比分母）。待核用 `disposition=pending_check`，不占用错因。
 
-家长设置里的时长、休息、揭晓策略、用量上限、学段以服务端为准，经心跳下发。PIN、TOTP、模型 Key 只在本机。
+家长设置里的时长、休息、揭晓策略、用量上限、学段以服务端为准，经心跳下发。PIN 与 TOTP 只在本机。讲题模型 Key 由家长在管理页配置（ADR-0015）：服务器加密保存，心跳只带版本，平板拉取后放进 Keystore。服务器清除后回到下发前的本机供应商设置。解绑或重置会删掉已下发的密钥。
 
 ## 服务端表
 
-SQLite，第一天带 `family_id`。v1 只有一个家庭。敏感列用主密钥 AES-256-GCM：应用 Secret、EncodingAESKey、`codeSecret`、钉钉令牌、模型 API Key。
+SQLite，第一天带 `family_id`。v1 只有一个家庭。敏感列用主密钥 AES-256-GCM：应用 Secret、EncodingAESKey、`codeSecret`、钉钉令牌、服务端小模型 API Key、平板讲题模型 API Key。
 
 ### 身份与通道
 
@@ -71,7 +71,9 @@ SQLite，第一天带 `family_id`。v1 只有一个家庭。敏感列用主密�
 | --- | --- | --- |
 | `outbox` | `id`，`app_id`，`kind`，`payload_json`，`attempts`，`next_at`，`status`，`expires_at` | 解锁类过期即丢，不补发 |
 | `audit_log` | `actor`，`action`，`target`，`at` | 只写不改。默认 180 天 |
-| `settings` | `key`，`value` | 含模型 `base_url`、`model`、`api_key_enc`、超时、保留期、限流、时区、`public_base_url`、`trusted_proxies` |
+| `settings` | `key`，`value` | 含服务端小模型 `base_url`、`model`、`api_key_enc`、超时、保留期、限流、时区、`public_base_url`、`trusted_proxies`。这个 Key 不下发 |
+| `tablet_model_config` | `family_id`，`version`，`cleared`，`provider_type`，`base_url`，`model_name`，`vision_model_name`，`api_key_enc`，`api_key_changed_at`，`updated_at`，`updated_by` | 家庭级一行。v1 不做按孩子覆盖。`api_key_enc` 为主密钥 AES-256-GCM。版本只增不减。清除时版本加一并丢掉密文 |
+| `tablet_model_delivery` | `id`，`family_id`，`device_id`，`version`，`delivered_at` | 每次下发一条。不含密钥。管理页按设备取最近一条 |
 | `device_backup` | `id`，`device_id`，`child_id`，`created_at`，`size`，`sha256`，`blob_path`，`kdf_params` | 密文。保留最近 7 份日备份 + 4 份周备份 |
 | `dingtalk_account` | `id`，`family_id`，`dt_user_label`，`auth_method`（`oauth`/`dws`），令牌密文，`expires_at`，`status`，`authorized_at`，`last_sync_at`，`last_error` | v1 每家庭一个。v1.2 才使用 |
 | `child_group_binding` | `id`，`family_id`，`child_id`，`child_label`，`group_conv_id`，`group_label`，`teacher_rule`（`role`/`list`），`teacher_ids_json`，`enabled` | 一孩可多群 |

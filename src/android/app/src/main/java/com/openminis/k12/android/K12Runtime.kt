@@ -95,7 +95,51 @@ object K12Runtime {
         return true
     }
 
-    fun onForeground(now: Long = System.currentTimeMillis()) = advance { ScreenTime.onForeground(it, now) }
+    fun onForeground(now: Long = System.currentTimeMillis()) {
+        advance { ScreenTime.onForeground(it, now) }
+        K12SyncRuntime.onForeground()
+    }
+
+    fun permissionReportOrNull(): PermissionReport? = if (installed) probe?.read() else null
+
+    /** Pairing reached `active`. Schedules the periodic sync and runs one pass now. */
+    fun markPaired(endpoint: com.openminis.k12.device.PairedEndpoint) {
+        if (installed) {
+            state = state.copy(
+                profile = state.profile.copy(
+                    pairing = "active",
+                    deviceId = endpoint.deviceId,
+                    childId = endpoint.childId.ifBlank { state.profile.childId },
+                ),
+            )
+            persist()
+        }
+        K12SyncRuntime.onPairingSucceeded(endpoint)
+    }
+
+    /** Applies time limits from a heartbeat without requiring the parent session to be open. */
+    fun applyServerPolicy(patch: com.openminis.k12.device.ServerPolicyPatch) {
+        val stage = patch.stageStored?.let { StudyStage.fromStored(it) }
+        if (!installed) return
+        val current = ScreenTime.limits(state.profile.stage, state.profile)
+        val merged = com.openminis.k12.device.mergeServerLimits(
+            com.openminis.k12.device.LimitTriple(current.dailyMin, current.weekendExtraMin, current.breakMin),
+            patch,
+        )
+        var profile = state.profile
+        if (merged != null) {
+            profile = profile.copy(
+                dailyLimitOverrideMin = merged.daily,
+                weekendExtraOverrideMin = merged.weekend,
+                breakOverrideMin = merged.breakMin,
+            )
+        }
+        if (stage != null) profile = profile.copy(stage = stage)
+        if (profile != state.profile) {
+            state = state.copy(profile = profile)
+            persist()
+        }
+    }
 
     fun onBackground(now: Long = System.currentTimeMillis()) = advance { ScreenTime.onBackground(it, now) }
 
@@ -114,6 +158,16 @@ object K12Runtime {
 
     fun onEnteredChildFacing() {
         if (state.parent.unlocked) lock()
+    }
+
+    /** Local unpair or reset. Drops the server-delivered model key. */
+    fun unpairOrReset() {
+        if (installed) {
+            state = state.copy(profile = state.profile.copy(pairing = "unpaired"))
+            persist()
+        }
+        K12SyncRuntime.onUnpairOrReset()
+        com.openminis.k12.model.K12ModelRuntime.onUnpairOrReset()
     }
 
     private fun advance(block: (K12State) -> K12State) {

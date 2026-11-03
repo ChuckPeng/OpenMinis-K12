@@ -55,4 +55,16 @@
     <string name="k12_pin_wrong">PIN 不正确。</string>
     <string name="k12_pin_locked">连续错误次数太多，请 15 分钟后再试。</string>
     <string name="k12_stage_senior_note">高中只作预留。这一版不提供高中讲法。</string>
+    <string name="k12_model_managed_title">讲题模型</string>
+    <string name="k12_model_managed_body">由服务器管理，这台平板不能修改。</string>
+    <string name="k12_model_provider">供应商类型</string>
+    <string name="k12_model_base">服务地址</string>
+    <string name="k12_model_name">模型</string>
+    <string name="k12_model_vision">视觉模型</string>
+    <string name="k12_model_vision_same">与讲题模型相同</string>
+    <string name="k12_model_key">密钥</string>
+    <string name="k12_model_key_set">已设置</string>
+    <string name="k12_model_key_missing">未设置</string>
+    <string name="k12_model_version">版本 %1$d</string>
+    <string name="k12_model_back">返回</string>
 </resources>

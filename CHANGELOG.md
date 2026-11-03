@@ -8,6 +8,22 @@ as defined in `docs/k12/conventions.md` (K12 SemVer is independent of upstream M
 
 ## [Unreleased]
 
+## [1.0.0-rc.2] - 2026-11-03
+
+Parent configures the tablet chat model once in the admin UI. Paired tablets store it in the Android Keystore and apply it through the existing provider settings. Model traffic is not proxied. Upstream Android baseline remains **1.15** (`versionCode` 37). Product SemVer `1.0.0-rc.2` / `versionCode` `1000008` (STAGE 8). ADR-0015 amends ADR-0006.
+
+### Added
+
+- Family-level tablet model config: provider type, Base URL, model name, optional vision model, and a write-only API key encrypted with the master key (`GET`/`PUT`/`DELETE /api/v1/admin/tablet-model`). No per-child override. No default vendor. Base URL checks are syntax only. No spend budget.
+- Heartbeat field `tablet_model_version` only. Paired devices fetch the key from `GET /api/v1/device/tablet-model`. Unpaired, pending, and revoked devices get 401 or 403. Each delivery is audited with device id, version, and time.
+- Admin page（平板讲题模型）shows the masked key state, version, and last delivery per device.
+- Android applies the config through `ProviderRepository` (`addInstance` / `updateInstance` / `saveApiKey`). While it is active the provider screens are read-only. Clearing the server config restores the previous local provider selection. Unpair or reset wipes the delivered key.
+- Paired tablets schedule sync with WorkManager: a 15-minute periodic job (the contract has no interval; 15 minutes is the platform minimum), plus a one-off run when the app comes to the foreground and when pairing becomes active. Each run sends the heartbeat, applies `config_json`, fetches the tablet model when its version changes, and uploads queued events. Unique work names use KEEP. Unpair or reset cancels the jobs.
+
+### Security
+
+- The API key is never returned by the admin API, never placed on the heartbeat, and never written to logs or audit targets.
+
 ## [1.0.0-rc.1] - 2026-11-03
 
 Release candidate after M5b. Clears the last v1 code blocker before `1.0.0` GA. Upstream Android baseline remains **1.15** (`versionCode` 37). Product SemVer `1.0.0-rc.1` / `versionCode` `1000007` (STAGE 7).
@@ -161,7 +177,8 @@ Milestone **M0 · Thin shell**. Upstream Android baseline: **1.15** (`versionCod
 
 - Release keystore material stays out of git; CI fails if a keystore is committed.
 
-[Unreleased]: https://github.com/ChuckPeng/OpenMinis-K12/compare/v1.0.0-rc.1...HEAD
+[Unreleased]: https://github.com/ChuckPeng/OpenMinis-K12/compare/v1.0.0-rc.2...HEAD
+[1.0.0-rc.2]: https://github.com/ChuckPeng/OpenMinis-K12/compare/v1.0.0-rc.1...v1.0.0-rc.2
 [1.0.0-rc.1]: https://github.com/ChuckPeng/OpenMinis-K12/compare/v1.0.0-m5b...v1.0.0-rc.1
 [1.0.0-m3]: https://github.com/ChuckPeng/OpenMinis-K12/compare/v1.0.0-m2...v1.0.0-m3
 [1.0.0-m2]: https://github.com/ChuckPeng/OpenMinis-K12/compare/v1.0.0-m1...v1.0.0-m2

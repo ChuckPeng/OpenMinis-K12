@@ -48,8 +48,8 @@ android {
         targetSdk = 35
         // K12 SemVer — independent of upstream. See docs/k12/conventions.md
         // and com.openminis.k12.Version. Upstream baseline was 1.15 / 37.
-        versionCode = 1_000_007
-        versionName = "1.0.0-rc.1"
+        versionCode = 1_000_008
+        versionName = "1.0.0-rc.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -477,6 +477,7 @@ dependencies {
     // ProcessLifecycleOwner — used by XAIOAuthManager to detect Custom
     // Tab dismissal (T-xai-oauth-stop-resume port iOS d1dbdd5d).
     implementation("androidx.lifecycle:lifecycle-process:2.8.7")
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.exifinterface:exifinterface:1.3.7")
 

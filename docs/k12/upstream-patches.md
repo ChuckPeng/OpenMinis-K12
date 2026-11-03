@@ -89,4 +89,15 @@
 
 `ChatViewModel` 只加 H-09 一行委托。供应商协议、`UsageRecord`、`RestrictedSettingsManager` 未改。
 
+## WP-B-9 平板讲题模型
+
+不改 `provider/` 协议。上游文件只加路由守卫或一行安装。
+
+| ID | 文件 | 符号 | 原因 | 验收 |
+| --- | --- | --- | --- | --- |
+| H-14 | `MinisApp.kt` | `onCreate` 里 `ProviderRepository` 赋值之后 | 安装 Keystore 上的平板模型配置运行时，并安装同步调度 | WP-B-9 |
+| H-11 | `K12Runtime.kt` | `onForeground` / `unpairOrReset` / `markPaired` | 前台与配对成功排队同步；解绑取消 WorkManager | WP-B-5 |
+| H-14 | `AppNavigation.kt` | `PROVIDER_LIST`、`ADD_PROVIDER`、`PROVIDER_DETAIL` | 服务器配置生效时改为只读说明，不进入可编辑表单 | WP-B-9 |
+| H-06 | `ShareReceiverActivity.kt` | 供应商 JSON 导入 | 服务器托管时不导入另一份供应商 | WP-B-9 |
+
 公开树没有 `provider-customization.properties`。依赖那份私有提示词的上游快照测试在本仓库跑不起来，CI 不把它们算进 M0 门槛。

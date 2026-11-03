@@ -31,6 +31,8 @@ data class HeartbeatResult(
     val configVersion: Int,
     val config: Map<String, Any>,
     val revoked: Boolean,
+    /** Model-config version only. The API key is never taken from the heartbeat. */
+    val tabletModelVersion: Long = 0,
 )
 
 data class HttpResponse(
@@ -60,11 +62,24 @@ class SyncClient(
 
         /** Whitelist of client-accepted config keys per §19.4. Alert thresholds are never accepted. */
         val ALLOWED_CONFIG_KEYS = setOf(
+            // Contract keys on config_json (device-api DeviceConfig).
+            "stage",
+            "daily_limit_minutes",
+            "weekend_extra_minutes",
+            "break_reminder_minutes",
+            "late_night_start",
+            "late_night_end",
+            "reveal_policy",
+            "turn_limit",
+            "image_limit",
+            "companion_limit_minutes",
+            "study_day_min_minutes",
+            "hotline_text",
+            "hotline_number",
+            // Older aliases still accepted by the M5b whitelist test.
             "daily_time_limit_minutes",
             "screen_time_break_minutes",
             "rest_duration_minutes",
-            "hotline_text",
-            "hotline_number",
             "parent_notice_board",
             "exam_mode_enabled",
         )
@@ -122,22 +137,37 @@ class SyncClient(
         dailyUsedMinutes: Int,
         permissionReportJson: JSONObject? = null,
     ): HeartbeatResult {
+        val resp = postHeartbeat(configVersionApplied, appVersion, dailyUsedMinutes, permissionReportJson)
+        if (resp.code != 200) {
+            throw IllegalStateException("Heartbeat failed with code ${resp.code}")
+        }
+        return parseHeartbeat(resp.bodyText, configVersionApplied)
+    }
+
+    /**
+     * Heartbeat without throwing. The body is not logged. Callers that need
+     * the status code (401, 429) use this instead of [heartbeat].
+     */
+    fun postHeartbeat(
+        configVersionApplied: Int,
+        appVersion: String,
+        dailyUsedMinutes: Int,
+        permissionReportJson: JSONObject? = null,
+    ): HttpResponse {
         val reqObj = JSONObject()
         reqObj.put("device_id", config.deviceId)
         reqObj.put("config_version_applied", configVersionApplied)
         reqObj.put("app_version", appVersion)
         reqObj.put("daily_used_minutes", dailyUsedMinutes)
         if (permissionReportJson != null) {
-            reqObj.put("permission_report", permissionReportJson)
+            reqObj.put("permission_check", permissionReportJson)
         }
-
         val body = reqObj.toString().toByteArray(Charsets.UTF_8)
-        val resp = signedRequest("POST", "/api/v1/device/heartbeat", body, mapOf("Content-Type" to "application/json"))
-        if (resp.code != 200) {
-            throw IllegalStateException("Heartbeat failed with code ${resp.code}: ${resp.bodyText}")
-        }
+        return signedRequest("POST", "/api/v1/device/heartbeat", body, mapOf("Content-Type" to "application/json"))
+    }
 
-        val json = JSONObject(resp.bodyText)
+    fun parseHeartbeat(bodyText: String, configVersionApplied: Int): HeartbeatResult {
+        val json = JSONObject(bodyText)
         val serverTimeStr = json.optString("server_time", "")
         val serverTimeMs = parseServerTimeToMs(serverTimeStr)
         if (serverTimeMs > 0) {
@@ -145,7 +175,8 @@ class SyncClient(
         }
 
         val cfgVersion = json.optInt("config_version", configVersionApplied)
-        val rawCfg = json.optJSONObject("config") ?: JSONObject()
+        // The contract field is config_json. `config` remains for older fixtures.
+        val rawCfg = json.optJSONObject("config_json") ?: json.optJSONObject("config") ?: JSONObject()
         val filteredCfg = mutableMapOf<String, Any>()
         for (key in rawCfg.keys()) {
             if (key in ALLOWED_CONFIG_KEYS) {
@@ -159,8 +190,16 @@ class SyncClient(
             configVersion = cfgVersion,
             config = filteredCfg,
             revoked = revoked,
+            tabletModelVersion = json.optLong("tablet_model_version", 0L),
         )
     }
+
+    /**
+     * Full tablet-model config. Call only after the heartbeat version changes.
+     * The response may contain an API key; callers must not log the body.
+     */
+    fun fetchTabletModel(): HttpResponse = signedRequest("GET", "/api/v1/device/tablet-model")
+
 
     /**
      * Uploads study events in batches with gzip compression (WP-B-4, §19.4).
