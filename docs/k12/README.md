@@ -28,7 +28,7 @@
 | `test-plan.md` | 单测、集成、双测试机、评测、红队、试点 |
 | `roadmap.md` | v1 / v1.1 / v1.2 与后置里程碑的工作包 |
 | `modules/` | 见下表 |
-| `decisions/` | ADR-0001–0013 |
+| `decisions/` | ADR-0001–0014 |
 
 ### 模块
 
@@ -111,7 +111,7 @@
 | T-29 | `codeSecret` 由服务端生成 32 字节，用设备公钥密封。Ed25519 走 X25519 sealed box；P-256 走 ECIES。`pending_confirm` 的密钥只能调配对状态 | 设备公钥不能直接当对称密钥；未确认设备不能打业务接口 |
 | T-30 | 长轮询始终返回当前 JSON，并用 `changed` 表示是否变化 | 客户端不用区分空正文 |
 | T-31 | 设备状态 `pending_confirm` / `active` / `revoked`。`config_json` 键见数据模型。备份文件魔数 `K12B`。报告 HMAC 的明文是 `link_id`、换行、`exp`（Unix 秒）。除事件毫秒和 `X-K12-Ts` 外，时间用 RFC3339 UTC | 与 OpenAPI 的 `date-time` 一致 |
-| T-32 | 计算工具接口先定。第一候选是 Symja（GPL-3）。体积或无 GMS 烟测失败就换另一个 GPL 兼容库，不再请示 | 接口稳定，库可以换 |
+| T-32 | 计算工具接口先定。第一候选是 Symja。体积或无 GMS 烟测失败就换另一个 GPL 兼容库，不再请示。2026-11-03 起实现为 `matheclipse-core` 3.2.0（该模块自 3.1.1 起为 LGPL-3.0，与仓库 GPL-3.0 兼容）。见 ADR-0014 | 接口稳定，库可以换 |
 | T-33 | v1.1 不写口语 `score`。指标 6 只计次数与时长 | M4 已写明不打分 |
 | T-34 | 精通 ≥0.85；良好 ≥0.65 且 <0.85；合格 ≥0.40 且 <0.65；薄弱 <0.40 | 把「≥0.85」落到互斥区间 |
 | T-35 | `mistake_created.disposition` 为 `recorded` 或 `pending_check`。后者不进错题数和掌握度 | 不新造事件类型，也不占用五类错因 |

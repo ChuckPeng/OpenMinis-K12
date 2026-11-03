@@ -85,6 +85,7 @@
 | H-16 | `ScheduledTaskManager.kt` | `create` | 儿童模式拒绝创建定时任务 | F2 |
 | H-18 | `SkillRepository.kt` | `init`（`installBundledSkills` 之后） | 安装 `study-companion-core`，并物化无个人数据的 student / catalog 模板；不覆盖更新的本地版本 | WP-M1-1…4、K1、K3 |
 | H-09 | `ChatViewModel.kt` | `buildSystemPrompt` 返回前 | 一行追加 `TutoringRuntime.promptSuffix()`（当前层与禁止事项）；教法仍在技能里 | WP-M2-1…3、A1 |
+| H-01 | `build.gradle.kts`、`proguard-rules.pro` | `matheclipse-core` 依赖、multidex、packaging excludes、R8 keep | BLOCK-CAS-1：把 Symja 3.2.0 打进 APK。逻辑在 `com.openminis.k12.tutoring`，不改 `ChatViewModel` | A4 |
 
 `ChatViewModel` 只加 H-09 一行委托。供应商协议、`UsageRecord`、`RestrictedSettingsManager` 未改。
 

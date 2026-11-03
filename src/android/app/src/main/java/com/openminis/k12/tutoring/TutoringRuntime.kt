@@ -18,6 +18,9 @@ object TutoringRuntime {
     }
 
     fun dispatch(action: TutoringAction, nowMs: Long = System.currentTimeMillis()): ReduceResult {
+        // A4: load Symja off this thread before the first check. Start is the
+        // session boundary; the engine itself refuses the Android main thread.
+        if (action is TutoringAction.Start) SymjaCalcEngine.warmUpAsync()
         val result = TutoringMachine.reduce(state, action, nowMs)
         if (action is TutoringAction.Jailbreak) {
             // G2 / A7: layer must not move.

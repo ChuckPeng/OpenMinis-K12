@@ -65,7 +65,7 @@ M2 的「申请看答案」先弹出 PIN。M5b 再改成远程申请。
 
 | ID | 事项 | 说明 |
 | --- | --- | --- |
-| BLOCK-CAS-1 | 打包并默认启用真实 CAS（Symja 或等价 GPL 兼容库）做辅导验算（A4） | **不在 M3 范围**（M3 是错题/FSRS/图谱）。M2 仅有算术烟测引擎 + 反射式 Symja 桥。Symja `matheclipse-core` 3.0.0 ≈ **7.0 MB**；连同 parser/external/apfloat/hipparchus/choco/kryo 等，未压缩依赖合计约 **15–25+ MB**（R8 前），对 APK 体积影响大，需单独工作包评估裁剪/拆分 dex。**`1.0.0` GA 前必须完成**，否则竞品级算错风险不可接受 |
+| BLOCK-CAS-1 | 打包并默认启用真实 CAS（Symja）做辅导验算（A4） | **已解决**（`1.0.0-rc.1`）。`CalcEngines.preferred()` 为 `SymjaCalcEngine`，依赖 `org.matheclipse:matheclipse-core:3.2.0`（parser / external 随它引入）。这三件自 Symja 3.1.1 起在 Maven 上为 **LGPL-3.0**，可并入本仓库 GPL-3.0。类文件是 Java 11 字节码，工具链 Java 17，`minSdk` 26。M2 的算术烟测引擎仍留给显式传入的单测。首次加载在后台单线程；主线程调用直接视为工具不可用。输入有长度、嵌套、语法白名单和 2 秒预算。体积见该版本 changelog 与 PR。GA 仍是 `1.0.0`（`versionCode` STAGE 9） |
 
 ## v1 · M5a 服务端核心
 
