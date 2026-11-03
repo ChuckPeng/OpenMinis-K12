@@ -47,6 +47,19 @@ enum class DeviceStatus {
 object DevicePairing {
 
     /**
+     * Invoked when a pairing reaches `active`. Pending and revoked do not call it.
+     * The sync runtime registers this and schedules the first heartbeat.
+     */
+    var onActivated: ((PairedEndpoint) -> Unit)? = null
+
+    fun noteActivated(endpoint: PairedEndpoint, status: DeviceStatus) {
+        if (status != DeviceStatus.ACTIVE) return
+        if (endpoint.baseUrl.isBlank() || endpoint.deviceId.isBlank()) return
+        onActivated?.invoke(endpoint)
+    }
+
+
+    /**
      * Parses QR code content. Supports both JSON and custom URI schemes:
      * - JSON: {"base_url":"...", "cert_fingerprint":"...", "server_pubkey":"...", "pair_code":"..."}
      * - URI: k12://pair?url=...&cert=...&pubkey=...&code=...

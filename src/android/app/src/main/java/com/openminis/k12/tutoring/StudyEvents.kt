@@ -68,9 +68,13 @@ sealed class StudyEvent {
 class StudyEventLog(private val capacity: Int = 500) {
     private val items = ArrayDeque<StudyEvent>()
 
+    /** Set by the sync runtime. Null in unit tests that do not install it. */
+    var onAppend: ((StudyEvent) -> Unit)? = null
+
     fun append(event: StudyEvent) {
         if (items.size >= capacity) items.removeFirst()
         items.addLast(event)
+        onAppend?.invoke(event)
     }
 
     fun appendAll(events: List<StudyEvent>) {

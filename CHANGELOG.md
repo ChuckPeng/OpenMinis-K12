@@ -18,6 +18,7 @@ Parent configures the tablet chat model once in the admin UI. Paired tablets sto
 - Heartbeat field `tablet_model_version` only. Paired devices fetch the key from `GET /api/v1/device/tablet-model`. Unpaired, pending, and revoked devices get 401 or 403. Each delivery is audited with device id, version, and time.
 - Admin page（平板讲题模型）shows the masked key state, version, and last delivery per device.
 - Android applies the config through `ProviderRepository` (`addInstance` / `updateInstance` / `saveApiKey`). While it is active the provider screens are read-only. Clearing the server config restores the previous local provider selection. Unpair or reset wipes the delivered key.
+- Paired tablets schedule sync with WorkManager: a 15-minute periodic job (the contract has no interval; 15 minutes is the platform minimum), plus a one-off run when the app comes to the foreground and when pairing becomes active. Each run sends the heartbeat, applies `config_json`, fetches the tablet model when its version changes, and uploads queued events. Unique work names use KEEP. Unpair or reset cancels the jobs.
 
 ### Security
 
