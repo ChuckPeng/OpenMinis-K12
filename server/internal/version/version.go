@@ -5,8 +5,8 @@ package version
 // Product SemVer and related metadata. Defaults match the current milestone
 // when built without ldflags (local `go test` / `go build`).
 var (
-	Version         = "1.0.0-rc.1"
-	VersionCode     = "1000007"
+	Version         = "1.0.0-rc.2"
+	VersionCode     = "1000008"
 	GitCommit       = "unknown"
 	UpstreamVersion = "1.15"
 )

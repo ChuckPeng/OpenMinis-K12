@@ -116,6 +116,15 @@ object K12Runtime {
         if (state.parent.unlocked) lock()
     }
 
+    /** Local unpair or reset. Drops the server-delivered model key. */
+    fun unpairOrReset() {
+        if (installed) {
+            state = state.copy(profile = state.profile.copy(pairing = "unpaired"))
+            persist()
+        }
+        com.openminis.k12.model.K12ModelRuntime.onUnpairOrReset()
+    }
+
     private fun advance(block: (K12State) -> K12State) {
         if (!installed) return
         val before = state.clockAnomaly

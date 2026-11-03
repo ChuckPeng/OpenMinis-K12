@@ -77,7 +77,7 @@ class ShareReceiverActivity : ComponentActivity() {
             AppLogger.warning(TAG, "provider-JSON detection failed: ${t.message}")
             null
         }
-        if (providerJson != null) {
+        if (providerJson != null && !com.openminis.k12.model.K12ModelRuntime.editsLocked()) {
             // showDialog reports whether the dialog actually reached the
             // screen; if the window manager refused it, fall through so the
             // share is not silently dropped.

@@ -2,7 +2,7 @@
 import { onMounted, ref } from "vue";
 import { api } from "./api";
 
-type Tab = "wecom" | "parents" | "devices" | "alerts" | "reports" | "j12" | "audit" | "status";
+type Tab = "wecom" | "parents" | "devices" | "model" | "alerts" | "reports" | "j12" | "audit" | "status";
 
 const view = ref<"setup" | "login" | "app">("login");
 const tab = ref<Tab>("wecom");
@@ -47,6 +47,17 @@ const j12Key = ref("approve_question");
 
 const audit = ref<Array<{ actor: string; action: string; target: string; at: string }>>([]);
 const statusText = ref("");
+
+type ModelDelivery = { device_id: string; device_label: string; status: string; version: number; delivered_at?: string };
+const modelProvider = ref("");
+const modelBase = ref("");
+const modelName = ref("");
+const modelVision = ref("");
+const modelKey = ref("");
+const modelVersion = ref(0);
+const modelKeySet = ref(false);
+const modelKeyChanged = ref("");
+const modelDeliveries = ref<ModelDelivery[]>([]);
 
 async function boot() {
   err.value = "";
@@ -270,12 +281,72 @@ async function loadStatus() {
   statusText.value = JSON.stringify(r.body, null, 2);
 }
 
+async function loadTabletModel() {
+  const r = await api<{
+    version: number;
+    provider_type: string;
+    base_url: string;
+    model_name: string;
+    vision_model_name: string;
+    api_key_set: boolean;
+    api_key_changed_at?: string;
+    deliveries: ModelDelivery[];
+  }>("/api/v1/admin/tablet-model");
+  if (!r.ok || !r.body) {
+    msg.value = "读取失败";
+    return;
+  }
+  modelVersion.value = r.body.version || 0;
+  modelProvider.value = r.body.provider_type || "";
+  modelBase.value = r.body.base_url || "";
+  modelName.value = r.body.model_name || "";
+  modelVision.value = r.body.vision_model_name || "";
+  modelKeySet.value = !!r.body.api_key_set;
+  modelKeyChanged.value = r.body.api_key_changed_at || "";
+  modelDeliveries.value = r.body.deliveries || [];
+  modelKey.value = "";
+}
+
+async function saveTabletModel() {
+  msg.value = "保存中…";
+  const r = await api("/api/v1/admin/tablet-model", {
+    method: "PUT",
+    body: JSON.stringify({
+      provider_type: modelProvider.value,
+      base_url: modelBase.value,
+      model_name: modelName.value,
+      vision_model_name: modelVision.value,
+      api_key: modelKey.value,
+    }),
+  });
+  modelKey.value = "";
+  if (r.ok) {
+    msg.value = "已保存";
+    await loadTabletModel();
+  } else {
+    msg.value = "保存失败";
+  }
+}
+
+async function clearTabletModel() {
+  if (!confirm("清除后，已配对平板会回到原先的本机供应商设置。")) return;
+  const r = await api("/api/v1/admin/tablet-model", { method: "DELETE" });
+  modelKey.value = "";
+  if (r.ok) {
+    msg.value = "已清除";
+    await loadTabletModel();
+  } else {
+    msg.value = "清除失败";
+  }
+}
+
 function switchTab(t: Tab) {
   tab.value = t;
   msg.value = "";
   err.value = "";
   if (t === "parents") loadParents();
   if (t === "devices") loadDevices();
+  if (t === "model") loadTabletModel();
   if (t === "alerts") loadAlerts();
   if (t === "reports") {
     loadDevices();
@@ -319,6 +390,7 @@ onMounted(boot);
       <button class="secondary" @click="switchTab('wecom')">企微</button>
       <button class="secondary" @click="switchTab('parents')">家长</button>
       <button class="secondary" @click="switchTab('devices')">设备配对</button>
+      <button class="secondary" @click="switchTab('model')">平板讲题模型</button>
       <button class="secondary" @click="switchTab('alerts')">安全告警</button>
       <button class="secondary" @click="switchTab('reports')">学情日简报</button>
       <button class="secondary" @click="switchTab('j12')">J12 实测</button>
@@ -423,6 +495,50 @@ onMounted(boot);
           </tr>
           <tr v-if="devices.length === 0">
             <td colspan="6" style="text-align: center; color: #999;">暂无设备</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section v-else-if="tab === 'model'" class="panel">
+      <h2>平板讲题模型</h2>
+      <p class="sub">全家庭共用，不按孩子分别保存。平板直接访问这里填写的地址，服务器不转发对话。API Key 只写不回显。</p>
+      <label>供应商类型</label>
+      <input v-model="modelProvider" autocomplete="off" placeholder="与平板上的类型名一致，例如 openAI。不会代选。" />
+      <label>Base URL</label>
+      <input v-model="modelBase" autocomplete="off" placeholder="https://example.invalid/v1" />
+      <label>模型名称</label>
+      <input v-model="modelName" autocomplete="off" />
+      <label>视觉模型（拍题，可留空）</label>
+      <input v-model="modelVision" autocomplete="off" placeholder="留空则用上面的模型看图" />
+      <label>API Key</label>
+      <input v-model="modelKey" type="password" autocomplete="new-password" placeholder="已设置时留空表示不修改" />
+      <p class="sub">
+        版本 {{ modelVersion }}。
+        密钥{{ modelKeySet ? "已设置" : "未设置" }}<span v-if="modelKeyChanged">，上次修改 {{ modelKeyChanged }}</span>。
+      </p>
+      <button @click="saveTabletModel">保存</button>
+      <button class="ghost" @click="clearTabletModel">清除配置</button>
+      <p :class="msg.includes('失败') ? 'err' : 'ok'">{{ msg }}</p>
+      <h3>最近下发</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>设备标签</th>
+            <th>状态</th>
+            <th>版本</th>
+            <th>时间</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="d in modelDeliveries" :key="d.device_id">
+            <td>{{ d.device_label || d.device_id }}</td>
+            <td>{{ d.status }}</td>
+            <td>{{ d.delivered_at ? d.version : "尚未下发" }}</td>
+            <td>{{ d.delivered_at || "—" }}</td>
+          </tr>
+          <tr v-if="modelDeliveries.length === 0">
+            <td colspan="4" style="text-align: center; color: #999;">暂无设备</td>
           </tr>
         </tbody>
       </table>

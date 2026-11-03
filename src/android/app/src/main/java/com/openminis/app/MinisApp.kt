@@ -572,6 +572,7 @@ class MinisApp : Application(), ImageLoaderFactory {
         }
         com.openminis.app.agent.jobs.AgentCallbackLabels.install(this)
         providerRepository = ProviderRepository(this)
+        com.openminis.k12.model.K12ModelRuntime.install(this, providerRepository)
         // [T-provider-quota] Upstream balance / quota cache; refreshes only while
         // the app is in the foreground.
         com.openminis.app.quota.QuotaStore.start(this, providerRepository)

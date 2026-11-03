@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: OpenMinis-K12 管理 API
-  version: 0.0.0-r16
+  version: 0.0.0-r17
   license:
     name: GPL-3.0-only
     identifier: GPL-3.0-only
@@ -958,6 +958,73 @@ paths:
               schema:
                 $ref: "#/components/schemas/TestResult"
 
+  /api/v1/admin/tablet-model:
+    get:
+      tags: [people]
+      operationId: getTabletModel
+      summary: 读取平板讲题模型配置
+      description: |
+        家庭级。不按孩子覆盖。响应不含 API Key，只标明是否已设置和上次修改时间。
+        含每台设备最近一次下发的版本和时间。
+      responses:
+        "401":
+          $ref: "#/components/responses/Error"
+        "200":
+          description: 不含 API Key。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TabletModelAdmin"
+    put:
+      tags: [people]
+      operationId: putTabletModel
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      summary: 保存平板讲题模型配置
+      description: |
+        API Key 只写。空字符串表示不修改已有密钥。首次保存必须带密钥。
+        不设默认厂商。Base URL 只检查 http 或 https 语法。不做金额预算。
+        每次成功保存使 version 加一。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TabletModelWrite"
+      responses:
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "400":
+          $ref: "#/components/responses/Error"
+        "200":
+          description: 已保存。响应与 GET 相同，不含密钥。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TabletModelAdmin"
+    delete:
+      tags: [people]
+      operationId: deleteTabletModel
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      summary: 清除平板讲题模型配置
+      description: 版本加一，丢掉密钥密文。平板拉取后回到下发前的本机配置。
+      responses:
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "200":
+          description: 已清除。响应不含密钥。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TabletModelAdmin"
+
   /api/v1/admin/advice-entries:
     get:
       tags: [advice]
@@ -1764,6 +1831,76 @@ components:
           description: 只写。空表示不修改。
         timeout_seconds:
           type: integer
+
+    TabletModelAdmin:
+      type: object
+      additionalProperties: false
+      required: [scope, version, cleared, api_key_set, provider_type, base_url, model_name, vision_model_name, deliveries]
+      properties:
+        scope:
+          type: string
+          enum: [family]
+          description: v1 只有家庭级，没有按孩子覆盖。
+        version:
+          type: integer
+          minimum: 0
+        cleared:
+          type: boolean
+        provider_type:
+          type: string
+        base_url:
+          type: string
+        model_name:
+          type: string
+        vision_model_name:
+          type: string
+        api_key_set:
+          type: boolean
+        api_key_changed_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        deliveries:
+          type: array
+          items:
+            $ref: "#/components/schemas/TabletModelDeliveryRow"
+
+    TabletModelDeliveryRow:
+      type: object
+      additionalProperties: false
+      required: [device_id, device_label, status, version]
+      properties:
+        device_id:
+          type: string
+        device_label:
+          type: string
+        status:
+          type: string
+        version:
+          type: integer
+        delivered_at:
+          type: string
+          format: date-time
+
+    TabletModelWrite:
+      type: object
+      additionalProperties: true
+      required: [provider_type, base_url, model_name]
+      description: 未知字段（例如金额预算）被忽略，不保存。
+      properties:
+        provider_type:
+          type: string
+        base_url:
+          type: string
+        model_name:
+          type: string
+        vision_model_name:
+          type: string
+        api_key:
+          type: string
+          description: 只写。空表示不修改。响应永不回显。
 
     AdviceEntry:
       type: object

@@ -1,13 +1,13 @@
 openapi: 3.1.0
 info:
   title: OpenMinis-K12 设备与公网 API
-  version: 0.0.0-r16
+  version: 0.0.0-r17
   license:
     name: GPL-3.0-only
     identifier: GPL-3.0-only
   description: |
     平板与 OpenMinis-K12 服务端之间的契约，外加公网端口上的企微回调、签名报告链接和健康检查。
-    设计基线 r16。管理 API 见 admin-api.yaml。
+    设计基线 r17。管理 API 见 admin-api.yaml。
     技术默认已收口，见 docs/k12/README.md。服务端与平板同为 GPL-3.0。
     设备接口的响应不得包含 parent_advice_json、解锁码或告警片段。
 
@@ -349,6 +349,33 @@ paths:
         "401":
           $ref: "#/components/responses/Error"
         "404":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/device/tablet-model:
+    get:
+      tags: [device]
+      operationId: getTabletModel
+      summary: 拉取平板讲题模型配置
+      description: |
+        仅已配对且状态为 active 的设备。未配对、待确认或已吊销返回 401 或 403。
+        心跳只带版本。本接口在版本变化时返回完整配置，其中可以含 API Key。
+        每次成功响应写审计：设备 id、版本、时间。审计不含密钥。
+        `cleared` 为 true 时没有密钥，平板回到下发前的本机配置。
+      parameters:
+        - $ref: "#/components/parameters/K12Device"
+        - $ref: "#/components/parameters/K12Ts"
+        - $ref: "#/components/parameters/K12Nonce"
+        - $ref: "#/components/parameters/K12Sig"
+      responses:
+        "200":
+          description: 当前版本的配置。密钥只在未清除时出现。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TabletModelDelivery"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
           $ref: "#/components/responses/Error"
 
   /api/v1/device/heartbeat:
@@ -1137,6 +1164,10 @@ components:
           $ref: "#/components/schemas/DeviceConfig"
         app_update_available:
           type: boolean
+        tablet_model_version:
+          type: integer
+          minimum: 0
+          description: 平板讲题模型配置的版本。没有配置时为 0。此处不得出现 API Key。
 
     PermissionCheck:
       type: object
@@ -1213,6 +1244,31 @@ components:
         body:
           type: string
           description: 已脱敏文本。
+
+    TabletModelDelivery:
+      type: object
+      additionalProperties: false
+      required: [version, cleared]
+      properties:
+        version:
+          type: integer
+          minimum: 0
+        cleared:
+          type: boolean
+        provider_type:
+          type: string
+          description: 上游供应商类型名。服务器不代选默认厂商。
+        base_url:
+          type: string
+          description: 只要求是 http 或 https URL。不按厂商校验主机。
+        model_name:
+          type: string
+        vision_model_name:
+          type: string
+          description: 可选。空则平板用讲题模型处理图片。
+        api_key:
+          type: string
+          description: 仅未清除时下发。不得写入日志。
 
     Health:
       type: object

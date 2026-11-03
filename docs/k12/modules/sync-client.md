@@ -18,11 +18,11 @@
 
 签名头：`X-K12-Device`、`X-K12-Ts`（Unix 毫秒）、`X-K12-Nonce`（32 位小写十六进制）、`X-K12-Sig`。签名字节串是五行，用换行连接：大写方法、路径（含查询串）、时间戳、nonce、正文 SHA-256 的小写十六进制。空正文哈希空字节。时间窗 ±5 分钟。
 
-周期：WorkManager。事件平时每 5 分钟或满 100 条上传，日简报前 15 分钟强制一次。每批最多 500 条，gzip。心跳带上 `config_version_applied`、App 版本、当日用量、权限自检结果。
+周期：WorkManager。事件平时每 5 分钟或满 100 条上传，日简报前 15 分钟强制一次。每批最多 500 条，gzip。心跳带上 `config_version_applied`、App 版本、当日用量、权限自检结果，以及已应用的家长配置版本。响应里的 `tablet_model_version` 只是整数。密钥不出现在心跳里。版本变化时再 `GET /api/v1/device/tablet-model`。
 
 ## 数据
 
-本机保存：`public_base_url`、证书指纹、中继公钥、`device_id`、已应用配置版本、已消费的 `grant_id`、未确认的事件。不保存企微密钥、解锁码、`parent_advice_json`、告警片段。
+本机保存：`public_base_url`、证书指纹、中继公钥、`device_id`、已应用配置版本、已消费的 `grant_id`、未确认的事件。讲题模型配置（含 API Key）在 Android Keystore 加密存储里。不保存企微密钥、解锁码、`parent_advice_json`、告警片段。不把 API Key 写入日志。
 
 ## 依赖
 
@@ -45,6 +45,8 @@ Keystore 中的设备私钥、存储模块的服务端、家长管控要应用�
 | 指纹不符、签名被拒、设备已吊销 | 停止重试该请求，家长区显示离线或已吊销 |
 | 429 | 按响应退避。设计未写 `Retry-After`，没有则使用本地指数退避 |
 | 配置版本落后 | 应用新 `config_json` 后回报版本 |
+| 讲题模型版本变化 | 拉取 `GET /api/v1/device/tablet-model`，写入 Keystore，再应用到现有供应商设置。401 或 403 不保存响应。清除标记则回到下发前的本机配置 |
+| 解绑或重置 | 删掉已下发的密钥，并恢复下发前的本机供应商设置 |
 | gzip 或单批超过 500 | 拆批。不丢弃未确认事件 |
 
 ## 配置

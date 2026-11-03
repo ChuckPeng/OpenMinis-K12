@@ -28,7 +28,7 @@
 | `test-plan.md` | 单测、集成、双测试机、评测、红队、试点 |
 | `roadmap.md` | v1 / v1.1 / v1.2 与后置里程碑的工作包 |
 | `modules/` | 见下表 |
-| `decisions/` | ADR-0001–0014 |
+| `decisions/` | ADR-0001–0015 |
 
 ### 模块
 

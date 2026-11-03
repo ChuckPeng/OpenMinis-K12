@@ -130,6 +130,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/device/events", s.withDeviceAuth(false, s.postEvents))
 	mux.HandleFunc("/api/v1/device/reports", s.withDeviceAuth(false, s.listChildReports))
 	mux.HandleFunc("/api/v1/device/heartbeat", s.withDeviceAuth(false, s.heartbeat))
+	mux.HandleFunc("/api/v1/device/tablet-model", s.withDeviceAuth(false, s.getTabletModel))
 	mux.HandleFunc("/api/v1/device/backups", s.withDeviceAuth(false, s.putBackup))
 	mux.HandleFunc("/api/v1/device/backups/latest", s.withDeviceAuth(false, s.getLatestBackup))
 	mux.HandleFunc("/api/v1/device/app-update", s.withDeviceAuth(false, s.getAppUpdate))

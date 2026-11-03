@@ -31,6 +31,8 @@ data class HeartbeatResult(
     val configVersion: Int,
     val config: Map<String, Any>,
     val revoked: Boolean,
+    /** Model-config version only. The API key is never taken from the heartbeat. */
+    val tabletModelVersion: Long = 0,
 )
 
 data class HttpResponse(
@@ -159,8 +161,16 @@ class SyncClient(
             configVersion = cfgVersion,
             config = filteredCfg,
             revoked = revoked,
+            tabletModelVersion = json.optLong("tablet_model_version", 0L),
         )
     }
+
+    /**
+     * Full tablet-model config. Call only after the heartbeat version changes.
+     * The response may contain an API key; callers must not log the body.
+     */
+    fun fetchTabletModel(): HttpResponse = signedRequest("GET", "/api/v1/device/tablet-model")
+
 
     /**
      * Uploads study events in batches with gzip compression (WP-B-4, §19.4).

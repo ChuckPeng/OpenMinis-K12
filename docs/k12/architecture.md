@@ -1,12 +1,12 @@
 # 架构
 
-r16 基线。组件边界以本文为准；模块内部见 `modules/`。
+r17 基线（平板讲题模型的下发见 ADR-0015）。组件边界以本文为准；模块内部见 `modules/`。
 
 ## 上下文
 
 一个家庭自托管。v1 数据模型带 `family_id`，运行时只有一个家庭。不替其他家庭代收企业微信（可信 IP 不能填第三方），其他家庭用同一份镜像自己部署。
 
-平板上的讲题仍走上游 Minis 模型层。服务端另有一个 OpenAI 兼容小模型，只做通知抽取、报告文字、亲子建议改写，Key 不下发平板。
+平板上的讲题仍走上游 Minis 模型层，流量不经过本服务器。家长在管理页配置一次供应商、Base URL、API Key 和模型名（ADR-0015），服务器加密保存并下发给已配对平板。服务端另有一个 OpenAI 兼容小模型，只做通知抽取、报告文字、亲子建议改写，那个 Key 不下发平板。
 
 ```mermaid
 flowchart LR
@@ -44,7 +44,7 @@ flowchart LR
 | 企微出站转发代理 | 把 `gettoken` / `send` / `update_template_card` 从固定公网 IPv4 发出 | 不收设备 API，不代替上面的 HTTPS 代理 |
 | 企业微信自建应用 | 模板卡片与按钮回调 | 与家中其他应用分 AgentId / Secret / 回调路径 |
 | 钉钉 | v1.2，家长在管理页扫码一次 | 只读老师/管理员消息 |
-| 上游模型层 | 家长在平板按 Minis 原方式配置 | 本项目不改供应商实现，只加 PIN 门 |
+| 上游模型层 | 家长在管理页配置，平板应用到 Minis 原有供应商设置 | 不改供应商协议，不代理模型流量，只加只读说明与 PIN 门 |
 
 模式 B（已选定）：服务端在家中常开主机。出站企微 API 的基址指向出站转发代理（默认 `https://qyapi.weixin.qq.com`，配置成该代理地址）。入站不走这条出站代理。模式 A（服务端与出站代理同机）不采用。
 
@@ -102,9 +102,10 @@ flowchart TB
 
 | 秘密 | 位置 |
 | --- | --- |
-| corpid、应用 Secret、Token、EncodingAESKey、钉钉令牌、服务端模型 Key | 只在服务端，主密钥 AES-256-GCM。主密钥来自环境变量或 `/data/master.key`（权限 600），不进备份文件本体 |
+| corpid、应用 Secret、Token、EncodingAESKey、钉钉令牌、服务端小模型 Key | 只在服务端，主密钥 AES-256-GCM。主密钥来自环境变量或 `/data/master.key`（权限 600），不进备份文件本体。这个 Key 不下发平板 |
 | 服务端 Ed25519 签名私钥 | 只在服务端；公钥配对时写入平板 |
-| 设备私钥、`codeSecret`、TOTP、家长 PIN 哈希、讲题模型 Key | 平板。设备私钥与 `codeSecret`、TOTP 在 Android Keystore。PIN 只存加盐哈希 |
+| 设备私钥、`codeSecret`、TOTP、家长 PIN 哈希 | 平板。设备私钥与 `codeSecret`、TOTP 在 Android Keystore。PIN 只存加盐哈希 |
+| 讲题模型 API Key | 服务器主密钥加密保存；下发后平板放进 Keystore 加密存储。心跳不带密钥。服务器清除后平板回到原先的本机配置。解绑或重置会删掉已下发的密钥 |
 | 备份口令 | 只在家长手里。服务端只存密文 |
 | 告警片段 | 服务端加密，30 天，仅管理登录后可看。不进企微、不进大模型、设备接口不下发 |
 
@@ -187,4 +188,4 @@ flowchart LR
 
 K12 壳层包住现有 `MainActivity` / `NavHost`，不替换 Agent 循环。技能文件注入教法；揭晓由壳层状态机决定。挂钩清单见 `upstream-patches.md`。
 
-平板周期任务用 WorkManager。只有时长管控或专注计时在进行时才用前台服务。讲题模型流量仍走上游网络栈；访问服务端用 `NetworkHttp` 派生的 OkHttp 客户端，校验证书指纹。
+平板周期任务用 WorkManager。只有时长管控或专注计时在进行时才用前台服务。讲题模型流量仍走上游网络栈；访问服务端用 `NetworkHttp` 派生的 OkHttp 客户端，校验证书指纹。模型配置只在版本变化时从设备接口拉取，不把对话转到服务器。

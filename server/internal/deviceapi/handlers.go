@@ -708,6 +708,12 @@ func (s *Server) heartbeat(w http.ResponseWriter, r *http.Request) {
 		"server_time":          serverTime,
 		"app_update_available": false,
 	}
+	// Version only. The API key is fetched from GET /api/v1/device/tablet-model.
+	modelVer, verErr := s.Store.TabletModelVersion(ctx, dev.FamilyID)
+	if verErr != nil {
+		modelVer = 0
+	}
+	resp["tablet_model_version"] = modelVer
 
 	serverVer, cfgJSON, err := s.Store.GetDeviceConfig(ctx, dev.ID)
 	if err == nil && serverVer > req.ConfigVersionApplied {
