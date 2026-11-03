@@ -1,6 +1,7 @@
 package com.openminis.k12.tutoring
 
 import com.openminis.k12.Ids
+import com.openminis.k12.StudyStage
 import kotlin.math.abs
 
 /**
@@ -13,11 +14,32 @@ sealed class CalcResult {
     data class Err(val message: String) : CalcResult()
 }
 
-/** Whether two expressions are the same under the CAS, or the tool could not say. */
+/**
+ * Whether two expressions are the same real function.
+ *
+ * [Restricted] means they agree except for real domain: [Restricted.where]
+ * is the sorted symmetric difference of conditions such as `x!=1` (a pole on
+ * one side only) or `x>=0` (a radicand required on one side only). That is
+ * not a full match.
+ */
 sealed class CalcEquivalence {
     data class Same(val canonical: String) : CalcEquivalence()
+    data class Restricted(val where: List<String>) : CalcEquivalence()
     data object Different : CalcEquivalence()
     data class Unavailable(val message: String) : CalcEquivalence()
+}
+
+/** Number field for equation roots. Equivalence stays on the reals. */
+enum class CasField { REAL, COMPLEX }
+
+/**
+ * Complex roots are off unless a senior profile turns them on.
+ * Primary and junior ignore the flag. v1 does not teach senior mathematics;
+ * [CasField.COMPLEX] remains available for that stage and for direct calls.
+ */
+object CasPolicy {
+    fun field(stage: StudyStage?, complexSolutionsEnabled: Boolean): CasField =
+        if (complexSolutionsEnabled && stage == StudyStage.SENIOR) CasField.COMPLEX else CasField.REAL
 }
 
 fun interface CalcEngine {
@@ -32,11 +54,22 @@ fun interface CalcEngine {
 interface AlgebraCas : CalcEngine {
     fun simplify(expression: String): CalcResult
     fun factor(expression: String): CalcResult
+    /** Real functions. A domain hole on only one side is [CalcEquivalence.Restricted]. */
     fun equivalent(left: String, right: String): CalcEquivalence
-    fun solve(equation: String, variable: String): CalcResult
+
+    /**
+     * Univariate solution set. [field] defaults to reals, so `x^2+1==0` is `{}`
+     * (no real solution). [CasField.COMPLEX] keeps non-real roots.
+     */
+    fun solve(equation: String, variable: String, field: CasField = CasField.REAL): CalcResult
 
     /** Order-insensitive match of [student] against the roots of [equation]. */
-    fun solutionsMatch(student: String, equation: String, variable: String): CalcEquivalence
+    fun solutionsMatch(
+        student: String,
+        equation: String,
+        variable: String,
+        field: CasField = CasField.REAL,
+    ): CalcEquivalence
 }
 
 /** Minimal + - * / and parentheses evaluator for smoke tests and offline A4. */
@@ -149,7 +182,11 @@ object CalcCheck {
         return finish(comparison, session, eventLog, nowMs)
     }
 
-    /** Student roots against [equation] in [variable]. Order does not matter. */
+    /**
+     * Student roots against [equation] in [variable]. Order does not matter.
+     * The field comes from [CasPolicy]: real unless [stage] is senior and
+     * [complexSolutionsEnabled] is set.
+     */
     fun verifyEquationSolutions(
         student: String,
         equation: String,
@@ -158,9 +195,12 @@ object CalcCheck {
         session: TutoringState,
         eventLog: StudyEventLog? = null,
         nowMs: Long = System.currentTimeMillis(),
+        stage: StudyStage? = null,
+        complexSolutionsEnabled: Boolean = false,
     ): Pair<TutoringState, ReduceResult?> {
+        val field = CasPolicy.field(stage, complexSolutionsEnabled)
         val comparison = when (engine) {
-            is AlgebraCas -> engine.solutionsMatch(student, equation, variable).toComparison()
+            is AlgebraCas -> engine.solutionsMatch(student, equation, variable, field).toComparison()
             else -> ClaimComparison.UNAVAILABLE
         }
         return finish(comparison, session, eventLog, nowMs)
@@ -209,6 +249,7 @@ private enum class ClaimComparison { MATCH, DIFFER, UNAVAILABLE }
 
 private fun CalcEquivalence.toComparison(): ClaimComparison = when (this) {
     is CalcEquivalence.Same -> ClaimComparison.MATCH
+    is CalcEquivalence.Restricted -> ClaimComparison.DIFFER
     CalcEquivalence.Different -> ClaimComparison.DIFFER
     is CalcEquivalence.Unavailable -> ClaimComparison.UNAVAILABLE
 }

@@ -6,6 +6,7 @@ import org.matheclipse.core.eval.ExprEvaluator
 import org.matheclipse.core.expression.F
 import org.matheclipse.core.interfaces.IAST
 import org.matheclipse.core.interfaces.IExpr
+import org.matheclipse.core.interfaces.IRational
 import java.util.concurrent.Callable
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.ExecutorService
@@ -75,6 +76,9 @@ object SymjaCalcEngine : AlgebraCas {
 
     private val constants = setOf("Pi", "E", "I")
 
+    /** Heads whose real poles are not a finite set we can list. */
+    private val infinitePoleHeads = setOf("Tan", "Cot", "Sec", "Csc")
+
     /** Start loading the builtin table off the caller thread. Safe on the main thread. */
     fun warmUpAsync() {
         if (evaluator != null || !warmupStarted.compareAndSet(false, true)) return
@@ -114,22 +118,27 @@ object SymjaCalcEngine : AlgebraCas {
         }
     }
 
-    override fun solve(equation: String, variable: String): CalcResult {
+    override fun solve(equation: String, variable: String, field: CasField): CalcResult {
         if (onAndroidMainThread()) return CalcResult.Err("main-thread")
         val eq = prepare(equation) ?: return CalcResult.Err("rejected")
         val v = prepare(variable) ?: return CalcResult.Err("rejected")
-        return when (val out = runEngine { ev -> solveCanonical(ev, eq, v) }) {
+        return when (val out = runEngine { ev -> solveCanonical(ev, eq, v, field) }) {
             is Outcome.Ok -> out.value
             is Outcome.Fail -> CalcResult.Err(out.message)
         }
     }
 
-    override fun solutionsMatch(student: String, equation: String, variable: String): CalcEquivalence {
+    override fun solutionsMatch(
+        student: String,
+        equation: String,
+        variable: String,
+        field: CasField,
+    ): CalcEquivalence {
         if (onAndroidMainThread()) return CalcEquivalence.Unavailable("main-thread")
         val eq = prepare(equation) ?: return CalcEquivalence.Unavailable("rejected")
         val v = prepare(variable) ?: return CalcEquivalence.Unavailable("rejected")
         val answered = prepare(braceIfList(student)) ?: return CalcEquivalence.Unavailable("rejected")
-        return when (val out = runEngine { ev -> matchSolutions(ev, answered, eq, v) }) {
+        return when (val out = runEngine { ev -> matchSolutions(ev, answered, eq, v, field) }) {
             is Outcome.Ok -> out.value
             is Outcome.Fail -> CalcEquivalence.Unavailable(out.message)
         }
@@ -165,22 +174,43 @@ object SymjaCalcEngine : AlgebraCas {
     private fun equivalenceOf(ev: ExprEvaluator, left: String, right: String): CalcEquivalence {
         val a = parseTree(ev, left) ?: return CalcEquivalence.Unavailable("rejected")
         val b = parseTree(ev, right) ?: return CalcEquivalence.Unavailable("rejected")
-        return sameExpr(ev, a, b)
+        val algebraic = algebraicSame(ev, a, b)
+        if (algebraic != true) {
+            return if (algebraic == false) CalcEquivalence.Different else CalcEquivalence.Unavailable("symja")
+        }
+        val leftDomain = realDomain(ev, a) ?: return CalcEquivalence.Unavailable("domain")
+        val rightDomain = realDomain(ev, b) ?: return CalcEquivalence.Unavailable("domain")
+        val where = symmetricDifference(leftDomain, rightDomain)
+        return if (where.isEmpty()) CalcEquivalence.Same("0") else CalcEquivalence.Restricted(where)
     }
 
     private fun sameExpr(ev: ExprEvaluator, left: IExpr, right: IExpr): CalcEquivalence {
-        val diff = ev.eval(F.Simplify(F.Subtract(left, right)))
-        if (isNonFinite(diff)) return CalcEquivalence.Unavailable("non-finite")
-        val zero = ev.eval(F.PossibleZeroQ(diff))
-        return when {
-            zero.isTrue() -> CalcEquivalence.Same(diff.toString())
-            zero.isFalse() -> CalcEquivalence.Different
-            else -> CalcEquivalence.Unavailable("symja")
+        return when (algebraicSame(ev, left, right)) {
+            true -> CalcEquivalence.Same("0")
+            false -> CalcEquivalence.Different
+            null -> CalcEquivalence.Unavailable("symja")
         }
     }
 
-    private fun solveCanonical(ev: ExprEvaluator, equation: String, variable: String): CalcResult {
-        val roots = rootsOf(ev, equation, variable) ?: return CalcResult.Err("not-equation")
+    /** True, false, or null when Symja cannot decide. Ignores domain holes. */
+    private fun algebraicSame(ev: ExprEvaluator, left: IExpr, right: IExpr): Boolean? {
+        val diff = ev.eval(F.Simplify(F.Subtract(left, right)))
+        if (isNonFinite(diff)) return null
+        val zero = ev.eval(F.PossibleZeroQ(diff))
+        return when {
+            zero.isTrue() -> true
+            zero.isFalse() -> false
+            else -> null
+        }
+    }
+
+    private fun solveCanonical(
+        ev: ExprEvaluator,
+        equation: String,
+        variable: String,
+        field: CasField,
+    ): CalcResult {
+        val roots = rootsOf(ev, equation, variable, field) ?: return CalcResult.Err("not-equation")
         val text = roots.map { it.toString() }.sorted().joinToString(prefix = "{", postfix = "}", separator = ", ")
         return CalcResult.Ok(text)
     }
@@ -190,8 +220,9 @@ object SymjaCalcEngine : AlgebraCas {
         student: String,
         equation: String,
         variable: String,
+        field: CasField,
     ): CalcEquivalence {
-        val roots = rootsOf(ev, equation, variable) ?: return CalcEquivalence.Unavailable("not-equation")
+        val roots = rootsOf(ev, equation, variable, field) ?: return CalcEquivalence.Unavailable("not-equation")
         val given = parseTree(ev, student) ?: return CalcEquivalence.Unavailable("rejected")
         val answers = when {
             given.isAST && headName(given) == "List" -> argsOf(given as IAST)
@@ -208,12 +239,23 @@ object SymjaCalcEngine : AlgebraCas {
         return CalcEquivalence.Same("solutions")
     }
 
-    private fun rootsOf(ev: ExprEvaluator, equation: String, variable: String): List<IExpr>? {
+    private fun rootsOf(
+        ev: ExprEvaluator,
+        equation: String,
+        variable: String,
+        field: CasField,
+    ): List<IExpr>? {
         val eq = parseTree(ev, equation) ?: return null
         if (!eq.isAST || headName(eq) != "Equal") return null
         val sym = parseTree(ev, variable) ?: return null
         if (!sym.isSymbol || sym.isBuiltInSymbol) return null
         val solved = ev.eval(F.Solve(eq, sym))
+        val roots = rootList(solved) ?: return null
+        if (field == CasField.COMPLEX) return roots
+        return roots.filter { isRealValue(ev, it) }
+    }
+
+    private fun rootList(solved: IExpr): List<IExpr>? {
         if (!solved.isAST || headName(solved) != "List") return null
         val roots = ArrayList<IExpr>()
         val outer = solved as IAST
@@ -238,6 +280,130 @@ object SymjaCalcEngine : AlgebraCas {
             }
         }
         return roots
+    }
+
+    /** A root counts as real only when its imaginary part is identically zero. */
+    private fun isRealValue(ev: ExprEvaluator, expr: IExpr): Boolean {
+        val value = ev.eval(expr)
+        if (isNonFinite(value)) return false
+        val im = ev.eval(F.Im(value))
+        if (isNonFinite(im)) return false
+        return ev.eval(F.PossibleZeroQ(im)).isTrue()
+    }
+
+    /**
+     * Real domain as a set of conditions. Null when the domain is not a finite
+     * combination of poles and radicand inequalities (the check must not guess).
+     * An expression undefined everywhere is the single condition `undefined`.
+     */
+    private fun realDomain(ev: ExprEvaluator, expr: IExpr): RealDomain? {
+        val acc = DomainAcc()
+        if (!accumulateDomain(ev, expr, acc)) return null
+        if (acc.empty) return RealDomain(setOf("undefined"))
+        return RealDomain(acc.poles + acc.bounds)
+    }
+
+    private fun accumulateDomain(ev: ExprEvaluator, expr: IExpr, acc: DomainAcc): Boolean {
+        if (acc.empty) return true
+        if (expr.isNumber || expr.isSymbol) return true
+        if (!expr.isAST) return false
+        val ast = expr as IAST
+        val head = headName(ast)
+        if (head in infinitePoleHeads) return false
+        return when (head) {
+            "Power" -> accumulatePower(ev, ast, acc)
+            "Sqrt" -> addBound(ev, ast.arg1(), strict = false, acc) &&
+                accumulateDomain(ev, ast.arg1(), acc)
+            "Log" -> addBound(ev, ast.arg1(), strict = true, acc) &&
+                accumulateDomain(ev, ast.arg1(), acc)
+            else -> {
+                for (i in 1 until ast.size()) {
+                    if (!accumulateDomain(ev, ast.get(i), acc)) return false
+                }
+                true
+            }
+        }
+    }
+
+    private fun accumulatePower(ev: ExprEvaluator, ast: IAST, acc: DomainAcc): Boolean {
+        if (ast.size() < 3) return false
+        val base = ast.arg1()
+        val exp = ast.arg2()
+        if (!accumulateDomain(ev, base, acc) || !accumulateDomain(ev, exp, acc)) return false
+        if (exp.isInteger()) {
+            return if (exp.isNegative()) addPoles(ev, base, acc) else true
+        }
+        if (!exp.isRational()) return false
+        val evenRoot = (exp as IRational).denominator().isEven()
+        if (evenRoot && !addBound(ev, base, strict = exp.isNegative(), acc)) return false
+        return if (exp.isNegative()) addPoles(ev, base, acc) else true
+    }
+
+    private fun addPoles(ev: ExprEvaluator, base: IExpr, acc: DomainAcc): Boolean {
+        val simplified = ev.eval(F.Simplify(base))
+        if (isNonFinite(simplified)) return false
+        if (ev.eval(F.PossibleZeroQ(simplified)).isTrue()) {
+            acc.empty = true
+            return true
+        }
+        val symbols = userSymbols(base)
+        if (symbols.isEmpty()) return true
+        if (symbols.size != 1) return false
+        val name = symbols[0]
+        val sym = ev.parse(name)
+        val roots = rootList(ev.eval(F.Solve(F.Equal(base, F.C0), sym))) ?: return false
+        for (root in roots) {
+            val value = ev.eval(root)
+            if (isNonFinite(value) || userSymbols(value).isNotEmpty()) return false
+            if (!isRealValue(ev, value)) continue
+            acc.poles.add("$name!=${value.toString()}")
+        }
+        return true
+    }
+
+    private fun addBound(ev: ExprEvaluator, radicand: IExpr, strict: Boolean, acc: DomainAcc): Boolean {
+        val simplified = ev.eval(F.Simplify(radicand))
+        if (isNonFinite(simplified)) return false
+        if (simplified.isNumber && !strict && simplified.isNonNegativeResult()) return true
+        if (simplified.isNumber && strict && simplified.isPositiveResult()) return true
+        val op = if (strict) ">" else ">="
+        val text = simplified.toString()
+        val body = if (text.matches(Regex("[A-Za-z][A-Za-z0-9]*"))) text else "($text)"
+        acc.bounds.add("$body$op" + "0")
+        return true
+    }
+
+    private fun userSymbols(expr: IExpr): List<String> {
+        val found = sortedSetOf<String>()
+        val stack = ArrayDeque<IExpr>()
+        stack.add(expr)
+        while (stack.isNotEmpty()) {
+            val current = stack.removeLast()
+            if (current.isSymbol) {
+                val name = simpleName(current.toString())
+                if (!current.isBuiltInSymbol && name !in constants) found.add(name)
+                continue
+            }
+            if (current.isAST) {
+                val ast = current as IAST
+                for (i in 0 until ast.size()) stack.add(ast.get(i))
+            }
+        }
+        return found.toList()
+    }
+
+    private fun symmetricDifference(left: RealDomain, right: RealDomain): List<String> {
+        val onlyLeft = left.conditions.filter { it !in right.conditions }
+        val onlyRight = right.conditions.filter { it !in left.conditions }
+        return (onlyLeft + onlyRight).sorted()
+    }
+
+    private data class RealDomain(val conditions: Set<String>)
+
+    private class DomainAcc {
+        val poles = HashSet<String>()
+        val bounds = HashSet<String>()
+        var empty = false
     }
 
     private fun parseTree(ev: ExprEvaluator, prepared: String): IExpr? {

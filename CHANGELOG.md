@@ -21,7 +21,10 @@ Release candidate after M5b. Clears the last v1 code blocker before `1.0.0` GA. 
 ### Changed
 
 - Product SemVer → `1.0.0-rc.1` / `versionCode` `1000007`.
-- **BLOCK-CAS-1 resolved.** Maven modules `matheclipse-core`, `matheclipse-parser`, and `matheclipse-external` 3.2.0 are **LGPL-3.0** (Symja relicensed those modules in 3.1.1). LGPL-3.0 can be combined into this GPL-3.0 app; the library is unmodified and its source is the Symja tag `v3.2.0`. Class files are Java 11 bytecode, built with the repo's Java 17 toolchain. `minSdk` stays 26. Guava is forced to `33.6.0-android`. Multidex is explicit. R8 keeps `org.matheclipse.**` and `edu.jas.**` and may shrink the rest.
+- **BLOCK-CAS-1 resolved.** Maven modules `matheclipse-core`, `matheclipse-parser`, and `matheclipse-external` 3.2.0 are **LGPL-3.0** (Symja relicensed those modules in 3.1.1). LGPL-3.0 can be combined into this GPL-3.0 app; the library is unmodified and its source is the Symja tag `v3.2.0`. Class files are Java 11 bytecode, built with the repo's Java 17 toolchain. `minSdk` stays 26. Guava is forced to `33.6.0-android`. Multidex is explicit. R8 keeps `org.matheclipse.**` and `edu.jas.**` and may shrink the rest. The APK growth and the LGPL dependency are accepted.
+- Equation solutions are real by default. `x^2+1==0` is `{}` (no real solution), not `{-I, I}`. `CasField.COMPLEX` keeps non-real roots. `CasPolicy` honors that only for `StudyStage.SENIOR` when the setting is on; the setting defaults off, and primary or junior stay real.
+- Equivalence is over the reals. A domain hole or radicand that only one side has is `CalcEquivalence.Restricted` (for example `x!=1`, `x!=0`, `x!=-2`, `x>=0`) and is not a full match. Identical domains still match.
+- On-device or emulator confirmation of CAS startup is deferred. This version is checked with JVM unit tests and Robolectric.
 
 ### APK size
 

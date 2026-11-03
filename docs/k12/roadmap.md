@@ -65,7 +65,7 @@ M2 的「申请看答案」先弹出 PIN。M5b 再改成远程申请。
 
 | ID | 事项 | 说明 |
 | --- | --- | --- |
-| BLOCK-CAS-1 | 打包并默认启用真实 CAS（Symja）做辅导验算（A4） | **已解决**（`1.0.0-rc.1`）。`CalcEngines.preferred()` 为 `SymjaCalcEngine`，依赖 `org.matheclipse:matheclipse-core:3.2.0`（parser / external 随它引入）。这三件自 Symja 3.1.1 起在 Maven 上为 **LGPL-3.0**，可并入本仓库 GPL-3.0。类文件是 Java 11 字节码，工具链 Java 17，`minSdk` 26。M2 的算术烟测引擎仍留给显式传入的单测。首次加载在后台单线程；主线程调用直接视为工具不可用。输入有长度、嵌套、语法白名单和 2 秒预算。体积见该版本 changelog 与 PR。GA 仍是 `1.0.0`（`versionCode` STAGE 9） |
+| BLOCK-CAS-1 | 打包并默认启用真实 CAS（Symja）做辅导验算（A4） | **已解决**（`1.0.0-rc.1`）。`CalcEngines.preferred()` 为 `SymjaCalcEngine`，依赖 `org.matheclipse:matheclipse-core:3.2.0`（parser / external 随它引入）。这三件自 Symja 3.1.1 起在 Maven 上为 **LGPL-3.0**，可并入本仓库 GPL-3.0。体积与该许可证已接受。方程默认实数解（`{}` 即无实数解）；复数解仅高中且显式打开。等价尊重实数定义域，单侧的洞记为 `Restricted`，不是完整匹配。类文件是 Java 11 字节码，工具链 Java 17，`minSdk` 26。M2 的算术烟测引擎仍留给显式传入的单测。首次加载在后台单线程；主线程调用直接视为工具不可用。输入有长度、嵌套、语法白名单和 2 秒预算。真机或模拟器上的加载验证留到后续。体积见该版本 changelog 与 PR。GA 仍是 `1.0.0`（`versionCode` STAGE 9） |
 
 ## v1 · M5a 服务端核心
 

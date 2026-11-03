@@ -6,6 +6,8 @@ import com.openminis.k12.tutoring.CalcCheck
 import com.openminis.k12.tutoring.CalcEngines
 import com.openminis.k12.tutoring.CalcEquivalence
 import com.openminis.k12.tutoring.CalcResult
+import com.openminis.k12.tutoring.CasField
+import com.openminis.k12.tutoring.CasPolicy
 import com.openminis.k12.tutoring.Disposition
 import com.openminis.k12.tutoring.StudyEvent
 import com.openminis.k12.tutoring.StudyEventLog
@@ -49,7 +51,6 @@ class K12CasA4AcceptanceTest {
         assertTrue(cas.equivalent("(x+1)^2", "x^2+2*x+1") is CalcEquivalence.Same)
         assertTrue(cas.equivalent("2(x+1)", "2*x+2") is CalcEquivalence.Same)
         assertTrue(cas.equivalent("2x", "x*2") is CalcEquivalence.Same)
-        assertTrue(cas.equivalent("(x^2-1)/(x-1)", "x+1") is CalcEquivalence.Same)
         assertTrue(cas.equivalent("(x+1)^2", "x^2+1") is CalcEquivalence.Different)
         assertTrue(cas.equivalent("x^2-1", "(x-1)*(x+1)") is CalcEquivalence.Same)
 
@@ -75,6 +76,27 @@ class K12CasA4AcceptanceTest {
     }
 
     @Test
+    fun equivalenceRespectsRealDomain() {
+        assertEquals(listOf("x!=1"), restrictions("(x^2-1)/(x-1)", "x+1"))
+        assertEquals(listOf("x!=0"), restrictions("x/x", "1"))
+        assertEquals(listOf("x>=0"), restrictions("sqrt(x)^2", "x"))
+        assertEquals(listOf("x>=0"), restrictions("Sqrt(x)^2", "x"))
+        assertEquals(listOf("x!=-2"), restrictions("(x^2-4)/(x+2)", "x-2"))
+        assertTrue(cas.equivalent("(x^2-1)/(x-1)", "(x+1)*(x-1)/(x-1)") is CalcEquivalence.Same)
+        assertTrue(cas.equivalent("sqrt(x)^2", "Sqrt(x)*Sqrt(x)") is CalcEquivalence.Same)
+        assertTrue(cas.equivalent("(x+1)^2", "x^2+2*x+1") is CalcEquivalence.Same)
+
+        val session = startConfirmed("qh-domain")
+        val (_, hole) = CalcCheck.verifyStudentExpression(
+            student = "(x^2-1)/(x-1)",
+            reference = "x+1",
+            session = session,
+        )
+        assertEquals(Disposition.PENDING_CHECK, hole!!.state.disposition)
+        assertTrue(hole.message!!.contains("不确定"))
+    }
+
+    @Test
     fun simplifyAndFactor() {
         val simplified = cas.simplify("(x^2-1)/(x-1)")
         assertTrue(simplified is CalcResult.Ok)
@@ -97,7 +119,17 @@ class K12CasA4AcceptanceTest {
         assertTrue(cas.solutionsMatch("1", "(x-1)^2==0", "x") is CalcEquivalence.Same)
         assertTrue(cas.solutionsMatch("{}", "x+1==x", "x") is CalcEquivalence.Same)
         assertTrue(cas.solutionsMatch("0", "x+1==x", "x") is CalcEquivalence.Different)
-        assertTrue(cas.solutionsMatch("-I, I", "x^2+1==0", "x") is CalcEquivalence.Same)
+        assertEquals(CalcResult.Ok("{}"), cas.solve("x^2+1==0", "x"))
+        assertTrue(cas.solutionsMatch("-I, I", "x^2+1==0", "x") is CalcEquivalence.Different)
+        assertTrue(cas.solutionsMatch("{}", "x^2+1==0", "x") is CalcEquivalence.Same)
+        assertEquals(CalcResult.Ok("{-I, I}"), cas.solve("x^2+1==0", "x", CasField.COMPLEX))
+        assertTrue(
+            cas.solutionsMatch("-I, I", "x^2+1==0", "x", CasField.COMPLEX) is CalcEquivalence.Same,
+        )
+        assertEquals(CasField.REAL, CasPolicy.field(StudyStage.SENIOR, complexSolutionsEnabled = false))
+        assertEquals(CasField.REAL, CasPolicy.field(StudyStage.JUNIOR, complexSolutionsEnabled = true))
+        assertEquals(CasField.REAL, CasPolicy.field(null, complexSolutionsEnabled = true))
+        assertEquals(CasField.COMPLEX, CasPolicy.field(StudyStage.SENIOR, complexSolutionsEnabled = true))
 
         val session = startConfirmed("qh-solve")
         val (_, miss) = CalcCheck.verifyEquationSolutions(
@@ -114,6 +146,39 @@ class K12CasA4AcceptanceTest {
             session = session,
         )
         assertTrue(hit == null)
+        val (_, complexOff) = CalcCheck.verifyEquationSolutions(
+            student = "-I, I",
+            equation = "x^2+1==0",
+            variable = "x",
+            session = session,
+            stage = StudyStage.SENIOR,
+            complexSolutionsEnabled = false,
+        )
+        assertEquals(Disposition.PENDING_CHECK, complexOff!!.state.disposition)
+        val (_, complexOn) = CalcCheck.verifyEquationSolutions(
+            student = "-I, I",
+            equation = "x^2+1==0",
+            variable = "x",
+            session = session,
+            stage = StudyStage.SENIOR,
+            complexSolutionsEnabled = true,
+        )
+        assertTrue(complexOn == null)
+        val (_, juniorIgnored) = CalcCheck.verifyEquationSolutions(
+            student = "-I, I",
+            equation = "x^2+1==0",
+            variable = "x",
+            session = session,
+            stage = StudyStage.JUNIOR,
+            complexSolutionsEnabled = true,
+        )
+        assertEquals(Disposition.PENDING_CHECK, juniorIgnored!!.state.disposition)
+    }
+
+    private fun restrictions(left: String, right: String): List<String> {
+        val result = cas.equivalent(left, right)
+        assertTrue(result.toString(), result is CalcEquivalence.Restricted)
+        return (result as CalcEquivalence.Restricted).where
     }
 
     @Test
