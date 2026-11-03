@@ -83,7 +83,8 @@
 | H-14 | `build.gradle.kts`、`UpdateChecker.kt` | `RELEASE_REPO`、`RELEASES_URL`、`AUTO_UPDATE_CHECK` | 更新仓库改到本 fork。自动检查先关掉，自托管清单在 M5b | WP-M0-8 |
 | H-01 | `build.gradle.kts`、`src/rcloneStub` | rclone 依赖 | `rclone.aar` 不进 git。没有这份产物时改编译同包名的占位类，保证 CI 能汇编和跑单测。有 aar 时不用占位类 | WP-M0-8 |
 | H-16 | `ScheduledTaskManager.kt` | `create` | 儿童模式拒绝创建定时任务 | F2 |
+| H-18 | `SkillRepository.kt` | `init`（`installBundledSkills` 之后） | 安装 `study-companion-core`，并物化无个人数据的 student / catalog 模板；不覆盖更新的本地版本 | WP-M1-1…4、K1、K3 |
 
-`ChatViewModel` 在 M0 不加委托。供应商协议、`UsageRecord`、`RestrictedSettingsManager` 未改。
+`ChatViewModel` 在 M0/M1 不加教法委托（教法在技能文件）。供应商协议、`UsageRecord`、`RestrictedSettingsManager` 未改。
 
 公开树没有 `provider-customization.properties`。依赖那份私有提示词的上游快照测试在本仓库跑不起来，CI 不把它们算进 M0 门槛。

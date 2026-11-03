@@ -235,6 +235,14 @@ class SkillRepository(private val context: Context) {
         runCatching { installBundledSkills() }.onFailure {
             Log.e(TAG, "installBundledSkills failed — continuing: ${it.message}", it)
         }
+        // [K12 H-18] Install study-companion-core + materialize de-identified
+        // templates/catalog samples. Logic lives in com.openminis.k12; this is
+        // only the one-line hook. Does not override a newer local skill version.
+        runCatching {
+            com.openminis.k12.skills.K12SkillBundle.install(context, this)
+        }.onFailure {
+            Log.e(TAG, "K12SkillBundle.install failed — continuing: ${it.message}", it)
+        }
         startReloadWorker()
     }
 

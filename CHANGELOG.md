@@ -8,6 +8,23 @@ as defined in `docs/k12/conventions.md` (K12 SemVer is independent of upstream M
 
 ## [Unreleased]
 
+## [1.0.0-m1] - 2026-10-29
+
+Milestone **M1 · Three-tier skills & course catalog**. Upstream Android baseline: **1.15** (`versionCode` 37).
+
+### Added
+
+- Bundled skill `study-companion-core` (K1): layered hints, no full homework ghostwriting, beyond-syllabus tagging, break reminders, PIN refusal line.
+- De-identified `student.md` template (K3) under `assets/k12/templates/`.
+- Sample catalogs (WP-M1-3): junior math, junior English vocabulary, primary Chinese / Math / English — synthetic outlines only.
+- Official-Minis install instructions (K4): `docs/k12/skills/install-into-official-minis.md`.
+- H-18 hook: `SkillRepository` installs the K12 bundle without overriding a newer local skill version; templates materialize into app-private storage if absent.
+- Acceptance tests `K12M1AcceptanceTest`.
+
+### Changed
+
+- Product SemVer → `1.0.0-m1` / `versionCode` `1000002`.
+
 ## [1.0.0-m0] - 2026-10-29
 
 Milestone **M0 · Thin shell**. Upstream Android baseline: **1.15** (`versionCode` 37).
@@ -33,5 +50,6 @@ Milestone **M0 · Thin shell**. Upstream Android baseline: **1.15** (`versionCod
 
 - Release keystore material stays out of git; CI fails if a keystore is committed.
 
-[Unreleased]: https://github.com/ChuckPeng/OpenMinis-K12/compare/v1.0.0-m0...HEAD
+[Unreleased]: https://github.com/ChuckPeng/OpenMinis-K12/compare/v1.0.0-m1...HEAD
+[1.0.0-m1]: https://github.com/ChuckPeng/OpenMinis-K12/compare/v1.0.0-m0...v1.0.0-m1
 [1.0.0-m0]: https://github.com/ChuckPeng/OpenMinis-K12/releases/tag/v1.0.0-m0
