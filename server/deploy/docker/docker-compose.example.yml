@@ -1,7 +1,7 @@
 # Secondary path. Bind only to the reverse-proxy host network namespace.
 services:
   openminis-k12-server:
-    image: openminis-k12-server:1.0.0-m5a
+    image: openminis-k12-server:1.0.0-m5b
     user: "65532:65532"
     environment:
       OPENMINIS_K12_DATA_DIR: /data

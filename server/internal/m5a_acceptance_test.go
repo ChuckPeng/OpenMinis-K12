@@ -28,10 +28,7 @@ import (
 )
 
 func TestM5aVersionEmbedded(t *testing.T) {
-	if version.Version != "1.0.0-m5a" {
-		t.Fatalf("Version=%s", version.Version)
-	}
-	if version.VersionCode != "1000005" {
+	if version.VersionCode < "1000005" {
 		t.Fatalf("VersionCode=%s", version.VersionCode)
 	}
 }

@@ -48,8 +48,8 @@ android {
         targetSdk = 35
         // K12 SemVer — independent of upstream. See docs/k12/conventions.md
         // and com.openminis.k12.Version. Upstream baseline was 1.15 / 37.
-        versionCode = 1_000_005
-        versionName = "1.0.0-m5a"
+        versionCode = 1_000_006
+        versionName = "1.0.0-m5b"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

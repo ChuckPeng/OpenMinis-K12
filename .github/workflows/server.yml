@@ -49,6 +49,6 @@ jobs:
         run: |
           PKG=github.com/ChuckPeng/OpenMinis-K12/server/internal/version
           go build -trimpath \
-            -ldflags "-X ${PKG}.Version=1.0.0-m5a -X ${PKG}.VersionCode=1000005 -X ${PKG}.GitCommit=${GITHUB_SHA} -X ${PKG}.UpstreamVersion=1.15" \
+            -ldflags "-X ${PKG}.Version=1.0.0-m5b -X ${PKG}.VersionCode=1000006 -X ${PKG}.GitCommit=${GITHUB_SHA} -X ${PKG}.UpstreamVersion=1.15" \
             -o /tmp/openminis-k12-server ./cmd/openminis-k12-server
           /tmp/openminis-k12-server --version

@@ -8,6 +8,30 @@ as defined in `docs/k12/conventions.md` (K12 SemVer is independent of upstream M
 
 ## [Unreleased]
 
+## [1.0.0-m5b] - 2026-10-30
+
+Milestone **M5b · Tablet Integration & Device API**. Upstream Android baseline: **1.15** (`versionCode` 37). Product SemVer `1.0.0-m5b` / `versionCode` `1000006` (shared between Android and Go server).
+
+### Added
+
+- Device pairing protocol: QR / manual 10-minute one-time code, device public key registration, wrapped `codeSecret` (sealed box), WeCom confirmation card, certificate fingerprint pinning (J1, J9, J11, WP-B-1).
+- Remote reveal unlock: device signed unlock request, WeCom template card approval (question / 15-minute / deny), server Ed25519 grant signing, device grant verification, long-polling with fast <= 10s unlock, idempotent callbacks (J2–J8, J10, WP-B-2).
+- Offline reveal fallback: offline 6-digit backup code derived via HMAC-SHA256 from `codeSecret`, 5 wrong attempts locks 10 min, local PIN & RFC 6238 TOTP fallback when server unreachable within 5s (J6, J13, G5, WP-B-2).
+- Three-level alerts & content safety: 提示 / 关注 / 紧急 with 30-minute deduplication, encrypted snippet storage with 30-day retention, WeCom alert delivery without snippets, immediate emergency alert, F5-F7 emergency guidance without hardcoded hotline numbers (E5, H1–H5, WP-B-3).
+- Study events & daily aggregate: idempotent event upload (max 500 per batch, gzip), local day boundary at 04:00 (Asia/Shanghai), metrics computation (active seconds, attempts, hints, reveals, mistakes, flags), Go template daily briefing with HMAC signed link and noindex/no-referrer report page, device child report without parent advice (WP-B-4, S8, S11, S16, S17, E4).
+- Heartbeat & parental controls: server time calibration, config version sync with §19.4 keys (no alert thresholds), turn limit (60), image limit (20), companion limit (15 min) (WP-B-5, WP-B-7).
+- Encrypted device backups: `K12B` format, AES-256-GCM with PBKDF2/Argon2id, server retention (7 daily + 4 weekly), zero plaintext access on server (WP-B-6, §19.6).
+- Diagnostics & APK manifest: sanitized crash/log upload, app update check endpoint (WP-B-8, §19.7, §19.13).
+- Vue 3 Admin UI enhancements: device management, alert audit with snippet viewing, and report generation/link management.
+
+### Changed
+
+- Product SemVer → `1.0.0-m5b` / `versionCode` `1000006`.
+
+### Known v1 release blockers
+
+- **BLOCK-CAS-1** (Symja / real CAS for tutoring A4) remains open from M3.
+
 ## [1.0.0-m5a] - 2026-10-29
 
 Milestone **M5a · Server core**. Upstream Android baseline: **1.15** (`versionCode` 37). Product SemVer `1.0.0-m5a` / `versionCode` `1000005` (shared with embedded server ldflags).

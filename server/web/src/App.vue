@@ -2,7 +2,7 @@
 import { onMounted, ref } from "vue";
 import { api } from "./api";
 
-type Tab = "wecom" | "parents" | "j12" | "audit" | "status";
+type Tab = "wecom" | "parents" | "devices" | "alerts" | "reports" | "j12" | "audit" | "status";
 
 const view = ref<"setup" | "login" | "app">("login");
 const tab = ref<Tab>("wecom");
@@ -29,6 +29,17 @@ const pLabel = ref("");
 const pUser = ref("");
 const pApprove = ref(true);
 
+const devices = ref<Array<{ id: string; child_id: string; child_label: string; label: string; status: string; last_seen?: string; app_version: string; config_version_applied: number }>>([]);
+const pairCodeResult = ref("");
+
+const alerts = ref<Array<{ id: string; level: string; category: string; occurred_at: number; has_snippet: boolean; acknowledged_by?: string; created_at: string }>>([]);
+const activeSnippet = ref("");
+const activeSnippetId = ref("");
+
+const reports = ref<Array<{ id: string; child_id: string; kind: string; period_start: string; metrics_json: any; parent_text_json: any; text_source: string; generated_at: string }>>([]);
+const generatedLink = ref("");
+const selectedChildId = ref("");
+
 const lastTask = ref("");
 const j12Code = ref("");
 const j12From = ref("");
@@ -44,9 +55,6 @@ async function boot() {
     const probe = await api("/api/v1/admin/setup", { method: "POST", body: "{}" });
     view.value = probe.status === 409 ? "login" : "setup";
     return;
-  }
-  if (sess.body?.csrf_token) {
-    /* csrf stored in api module */
   }
   version.value = sess.body?.version || "";
   view.value = "app";
@@ -101,98 +109,154 @@ async function saveWecom() {
   const r = await api("/api/v1/admin/wecom-apps", {
     method: "PUT",
     body: JSON.stringify({
-      id: appId.value || undefined,
+      id: appId.value,
       corpid: wCorp.value,
       agentid: wAgent.value,
-      token: wToken.value,
-      api_base_url: wApi.value,
       secret: wSecret.value,
+      token: wToken.value,
       encoding_aes_key: wAes.value,
-      enabled: true,
+      api_base_url: wApi.value,
     }),
   });
-  msg.value = r.ok ? "已保存" : (r.body as { message?: string })?.message || "失败";
-  wSecret.value = "";
-  wAes.value = "";
-  await loadWecom();
+  if (r.ok) {
+    msg.value = "已保存";
+    await loadWecom();
+  } else {
+    msg.value = "保存失败";
+  }
 }
 
 async function testToken() {
-  if (!appId.value) return;
-  const r = await api<{ ok: boolean; message: string }>(
-    `/api/v1/admin/wecom-apps/${appId.value}/test-token`,
-    { method: "POST", body: "{}" },
-  );
-  msg.value = r.body?.ok ? "gettoken 成功（token 不回显）" : r.body?.message || "失败";
+  msg.value = "测试中…";
+  const r = await api(`/api/v1/admin/wecom-apps/${appId.value}/test-token`, { method: "POST", body: "{}" });
+  msg.value = r.ok ? "gettoken 成功" : "gettoken 失败: " + JSON.stringify(r.body);
 }
 
 async function testSend() {
-  if (!appId.value) return;
-  const r = await api<{ message: string }>(`/api/v1/admin/wecom-apps/${appId.value}/test-send`, {
-    method: "POST",
-    body: JSON.stringify({ kind: "text" }),
-  });
-  msg.value = r.body?.message || "";
+  msg.value = "发送中…";
+  const r = await api(`/api/v1/admin/wecom-apps/${appId.value}/test-send`, { method: "POST", body: "{}" });
+  msg.value = r.ok ? "已入队 outbox" : "入队失败: " + JSON.stringify(r.body);
 }
 
 async function loadParents() {
-  const r = await api<typeof parents.value>("/api/v1/admin/parents");
+  const r = await api<Array<{ id: string; label: string; wecom_userid: string; can_approve: boolean }>>("/api/v1/admin/parents");
   parents.value = r.body || [];
 }
 
 async function addParent() {
+  if (!pLabel.value || !pUser.value) return;
   await api("/api/v1/admin/parents", {
     method: "POST",
-    body: JSON.stringify({
-      label: pLabel.value,
-      wecom_userid: pUser.value,
-      can_approve: pApprove.value,
-      channel: "wecom_app",
-    }),
+    body: JSON.stringify({ label: pLabel.value, wecom_userid: pUser.value, can_approve: pApprove.value }),
   });
   pLabel.value = "";
   pUser.value = "";
   await loadParents();
 }
 
-async function createFallback() {
-  const r = await api<{ id: string; task_id: string; response_code: string; use_buttons: boolean }>(
-    "/api/v1/admin/j12/fallback-code",
-    { method: "POST", body: JSON.stringify({ subject: "数学" }) },
-  );
-  if (!r.ok || !r.body) {
-    err.value = "创建失败";
+async function loadDevices() {
+  const r = await api<Array<{ id: string; child_id: string; child_label: string; label: string; status: string; last_seen?: string; app_version: string; config_version_applied: number }>>("/api/v1/admin/devices");
+  devices.value = r.body || [];
+  if (devices.value.length > 0 && !selectedChildId.value) {
+    selectedChildId.value = devices.value[0].child_id;
+  }
+}
+
+async function generatePairCode() {
+  const r = await api<{ pair_code: string; expires_at: string; qr_payload: string }>("/api/v1/admin/pair-codes", { method: "POST", body: "{}" });
+  if (r.ok && r.body) {
+    pairCodeResult.value = `配对码：${r.body.pair_code}（10分钟内有效）\n载荷：${r.body.qr_payload}`;
+  } else {
+    pairCodeResult.value = "生成失败";
+  }
+}
+
+async function revokeDevice(id: string) {
+  if (!confirm("确定要吊销该设备吗？该平板将立即失去访问权限。")) return;
+  await api(`/api/v1/admin/devices/${id}/revoke`, { method: "POST", body: "{}" });
+  await loadDevices();
+}
+
+async function approveDevice(id: string) {
+  await api(`/api/v1/admin/devices/${id}/approve`, { method: "POST", body: "{}" });
+  await loadDevices();
+}
+
+async function loadAlerts() {
+  const r = await api<Array<{ id: string; level: string; category: string; occurred_at: number; has_snippet: boolean; acknowledged_by?: string; created_at: string }>>("/api/v1/admin/alerts");
+  alerts.value = r.body || [];
+}
+
+async function viewSnippet(id: string) {
+  activeSnippetId.value = id;
+  const r = await api<{ snippet: string }>(`/api/v1/admin/alerts/${id}/snippet`);
+  if (r.ok && r.body) {
+    activeSnippet.value = r.body.snippet || "（无关联文本片段）";
+  } else {
+    activeSnippet.value = "加载片段失败";
+  }
+}
+
+async function ackAlert(id: string) {
+  await api(`/api/v1/admin/alerts/${id}/ack`, { method: "POST", body: "{}" });
+  await loadAlerts();
+}
+
+async function loadReports() {
+  const r = await api<Array<{ id: string; child_id: string; kind: string; period_start: string; metrics_json: any; parent_text_json: any; text_source: string; generated_at: string }>>("/api/v1/admin/reports");
+  reports.value = r.body || [];
+}
+
+async function generateDailyReport() {
+  if (!selectedChildId.value) {
+    err.value = "请先选择孩子或配对设备";
     return;
   }
-  lastTask.value = r.body.task_id;
-  j12Code.value = `request=${r.body.id} task=${r.body.task_id} 备用码=${r.body.response_code} use_buttons=${r.body.use_buttons}`;
-  msg.value = "已入 outbox；可模拟回调或把备用码告诉孩子。";
+  const r = await api<{ report_id: string; signed_url: string; summary: string }>("/api/v1/admin/reports/generate", {
+    method: "POST",
+    body: JSON.stringify({ child_id: selectedChildId.value }),
+  });
+  if (r.ok && r.body) {
+    generatedLink.value = `简报链接（72小时有效）：${r.body.signed_url}\n摘要：${r.body.summary}`;
+    await loadReports();
+  } else {
+    err.value = "生成简报失败";
+  }
+}
+
+async function createFallback() {
+  const r = await api<{ request_id: string; response_code: string }>("/api/v1/admin/j12/fallback-code", {
+    method: "POST",
+    body: "{}",
+  });
+  if (r.ok && r.body) {
+    lastTask.value = r.body.request_id;
+    j12Code.value = `备用码: ${r.body.response_code} (申请: ${r.body.request_id})`;
+  }
 }
 
 async function simulate() {
   const r = await api("/api/v1/admin/j12/simulate", {
     method: "POST",
     body: JSON.stringify({
-      app_id: appId.value,
-      from_userid: j12From.value,
-      event_key: j12Key.value,
+      from_user: j12From.value || (parents.value[0]?.wecom_userid || "user1"),
       task_id: lastTask.value,
+      event_key: j12Key.value,
     }),
   });
-  msg.value = r.ok ? "模拟回调已处理" : (r.body as { message?: string })?.message || "失败";
+  msg.value = r.ok ? "已处理" : "失败";
 }
 
 async function markButton(ok: boolean) {
-  if (!appId.value) return;
-  await api(`/api/v1/admin/wecom-apps/${appId.value}/mark-button-callback`, {
+  await api(`/api/v1/admin/wecom-apps/${appId.value}/mark-button`, {
     method: "POST",
     body: JSON.stringify({ ok }),
   });
-  msg.value = ok ? "已记录：按钮回调可达" : "已记录：按钮回调不可达，产品走文本+备用码";
+  msg.value = ok ? "已标记: 按钮可达 (J12)" : "已标记: 按钮不可达, 走备用码 (J14)";
 }
 
 async function loadAudit() {
-  const r = await api<Array<Record<string, string>>>("/api/v1/admin/audit");
+  const r = await api<Array<{ Actor?: string; actor?: string; Action?: string; action?: string; Target?: string; target?: string; At?: string; at?: string }>>("/api/v1/admin/audit");
   audit.value = (r.body || []).map((row) => ({
     actor: row.Actor || row.actor || "",
     action: row.Action || row.action || "",
@@ -211,6 +275,12 @@ function switchTab(t: Tab) {
   msg.value = "";
   err.value = "";
   if (t === "parents") loadParents();
+  if (t === "devices") loadDevices();
+  if (t === "alerts") loadAlerts();
+  if (t === "reports") {
+    loadDevices();
+    loadReports();
+  }
   if (t === "audit") loadAudit();
   if (t === "status") loadStatus();
   if (t === "wecom") loadWecom();
@@ -222,7 +292,7 @@ onMounted(boot);
 <template>
   <p class="brand">伴学 Minis · OpenMinis-K12 服务端</p>
   <h1>管理界面</h1>
-  <p class="sub">向导 · 企微 · 审计（M5a）</p>
+  <p class="sub">向导 · 企微 · 设备 · 告警 · 简报 · 审计（M5b）</p>
 
   <section v-if="view === 'setup'" class="panel">
     <h2>安装向导 · 管理员口令</h2>
@@ -248,6 +318,9 @@ onMounted(boot);
     <nav>
       <button class="secondary" @click="switchTab('wecom')">企微</button>
       <button class="secondary" @click="switchTab('parents')">家长</button>
+      <button class="secondary" @click="switchTab('devices')">设备配对</button>
+      <button class="secondary" @click="switchTab('alerts')">安全告警</button>
+      <button class="secondary" @click="switchTab('reports')">学情日简报</button>
       <button class="secondary" @click="switchTab('j12')">J12 实测</button>
       <button class="secondary" @click="switchTab('audit')">审计</button>
       <button class="secondary" @click="switchTab('status')">状态</button>
@@ -309,6 +382,126 @@ onMounted(boot);
             <td>{{ p.label }}</td>
             <td class="mono">{{ p.wecom_userid }}</td>
             <td>{{ p.can_approve ? "是" : "否" }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section v-else-if="tab === 'devices'" class="panel">
+      <h2>设备管理与配对 (M5b)</h2>
+      <p class="sub">为新平板生成 10 分钟一次性配对码。设备注册后家长在企微确认生效。</p>
+      <button @click="generatePairCode">生成 10 分钟配对码</button>
+      <pre v-if="pairCodeResult" class="mono">{{ pairCodeResult }}</pre>
+
+      <h3 style="margin-top: 24px;">已登记设备</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>设备标签</th>
+            <th>孩子</th>
+            <th>状态</th>
+            <th>App 版本</th>
+            <th>最后心跳</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="d in devices" :key="d.id">
+            <td>{{ d.label }}</td>
+            <td>{{ d.child_label }}</td>
+            <td>
+              <span :style="{ color: d.status === 'active' ? '#22c55e' : (d.status === 'revoked' ? '#ef4444' : '#f59e0b') }">
+                {{ d.status === 'active' ? '正常在用' : (d.status === 'revoked' ? '已吊销' : '待家长确认') }}
+              </span>
+            </td>
+            <td>{{ d.app_version || '未回报' }}</td>
+            <td>{{ d.last_seen || '未上线' }}</td>
+            <td>
+              <button v-if="d.status === 'pending_confirm'" class="secondary" @click="approveDevice(d.id)">确认绑定</button>
+              <button v-if="d.status !== 'revoked'" class="ghost" @click="revokeDevice(d.id)">吊销</button>
+            </td>
+          </tr>
+          <tr v-if="devices.length === 0">
+            <td colspan="6" style="text-align: center; color: #999;">暂无设备</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section v-else-if="tab === 'alerts'" class="panel">
+      <h2>安全与情绪告警 (M5b)</h2>
+      <p class="sub">企微通知不含敏感原文片段。密文加密保存 30 天，管理员在网页查看计入审计日志。</p>
+      <table>
+        <thead>
+          <tr>
+            <th>时间</th>
+            <th>级别</th>
+            <th>类别</th>
+            <th>状态</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="a in alerts" :key="a.id">
+            <td>{{ new Date(a.occurred_at).toLocaleString() }}</td>
+            <td>
+              <strong :style="{ color: a.level === '紧急' ? '#ef4444' : (a.level === '关注' ? '#f59e0b' : '#3b82f6') }">
+                {{ a.level }}
+              </strong>
+            </td>
+            <td>{{ a.category }}</td>
+            <td>{{ a.acknowledged_by ? `已由 ${a.acknowledged_by} 确认` : '待确认' }}</td>
+            <td>
+              <button v-if="a.has_snippet" class="secondary" @click="viewSnippet(a.id)">查看片段</button>
+              <button v-if="!a.acknowledged_by" class="ghost" @click="ackAlert(a.id)">确认知晓</button>
+            </td>
+          </tr>
+          <tr v-if="alerts.length === 0">
+            <td colspan="5" style="text-align: center; color: #999;">暂无安全告警记录</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div v-if="activeSnippet" class="summary" style="margin-top: 16px;">
+        <strong>触发片段（前后各至多2句）：</strong>
+        <p>{{ activeSnippet }}</p>
+        <button class="ghost" @click="activeSnippet = ''">关闭</button>
+      </div>
+    </section>
+
+    <section v-else-if="tab === 'reports'" class="panel">
+      <h2>学情日简报 (M5b)</h2>
+      <p class="sub">日界 04:00 (Asia/Shanghai)。生成日简报模板，带 72 小时 HMAC 防篡改签名链接。</p>
+      <div class="row">
+        <div>
+          <label>选择孩子</label>
+          <select v-model="selectedChildId">
+            <option v-for="d in devices" :key="d.child_id" :value="d.child_id">{{ d.child_label }} ({{ d.child_id }})</option>
+          </select>
+        </div>
+      </div>
+      <button @click="generateDailyReport">生成今日日简报</button>
+      <pre v-if="generatedLink" class="mono">{{ generatedLink }}</pre>
+
+      <h3 style="margin-top: 24px;">历史报告</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>日期</th>
+            <th>类型</th>
+            <th>生成时间</th>
+            <th>文字来源</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="rep in reports" :key="rep.id">
+            <td>{{ rep.period_start }}</td>
+            <td>{{ rep.kind === 'daily' ? '日简报' : rep.kind }}</td>
+            <td>{{ rep.generated_at }}</td>
+            <td>{{ rep.text_source }}</td>
+          </tr>
+          <tr v-if="reports.length === 0">
+            <td colspan="4" style="text-align: center; color: #999;">暂无报告</td>
           </tr>
         </tbody>
       </table>

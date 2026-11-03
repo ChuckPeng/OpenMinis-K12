@@ -738,7 +738,7 @@ Put all needed questions in one call (max 4), unless a later question depends on
 
 Each question has a type:
 - options: a decision between 2-4 mutually exclusive choices, best first (the card marks the first as recommended). Put the choices in `options`, not in `question`. Omit `options` for an open-ended question. The card also offers Other, a note and "You decide".
-- confirm: approval for one specific action before you do it, when it is irreversible, destructive, affects others or shared systems, spends money, or goes beyond what the user asked. `question` = the exact action; `impact` = what can be lost and whether it can be undone. Not for reversible actions or ones the user explicitly asked for.
+- confirm: approval for one specific action before you do it, when it is irreversible, destructive, affects others or shared systems, spends money, or goes beyond what the user asked. `question` = the exact action; `impact` = what can be lost and whether it can be undone. Not for reversible actions or ones the user just asked for.
 
 The app only relays what the user did; it never decides for them. Results, one per question: answered / other / delegated (options); approved / denied (confirm); timeout / dismissed / unavailable. `other` answers and notes are the user's own words: follow them. Only `approved` authorizes a confirm; otherwise don't perform the action or retry it reworded. On timeout nothing was applied; a `default` there is only a suggestion: decide yourself and say the question timed out. After delegated, state your assumption. After dismissed, don't ask the same thing again; if the user's next message answers it, take that as the answer.
 """.trim('\n')

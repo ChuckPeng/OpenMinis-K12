@@ -233,7 +233,7 @@ class K12M3AcceptanceTest {
     ).firstOrNull { it.exists() } ?: File("../../$name")
 
     private fun resource(path: String): File {
-        val url = javaClass.classLoader.getResource(path)
+        val url = javaClass.classLoader?.getResource(path)
             ?: error("missing resource $path")
         return File(url.toURI())
     }
