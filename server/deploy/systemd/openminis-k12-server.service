@@ -1,0 +1,27 @@
+[Unit]
+Description=OpenMinis-K12 server
+Documentation=file:///usr/local/share/doc/openminis-k12/install-systemd.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=openminis-k12
+Group=openminis-k12
+ExecStart=/usr/local/bin/openminis-k12-server serve --config /etc/openminis-k12/config.yaml
+ExecStartPre=/usr/local/bin/openminis-k12-server migrate --config /etc/openminis-k12/config.yaml
+Restart=on-failure
+RestartSec=3
+WorkingDirectory=/var/lib/openminis-k12
+StateDirectory=openminis-k12
+ConfigurationDirectory=openminis-k12
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/openminis-k12
+AmbientCapabilities=
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target
