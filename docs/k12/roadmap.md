@@ -61,6 +61,12 @@ M2 的「申请看答案」先弹出 PIN。M5b 再改成远程申请。
 | WP-M3-3 | 错题 | WP-M3-2 | B3、B4 | M |
 | WP-M3-4 | 错题、课程目录 | WP-M1-3 | 图谱运行时下载，先修回溯；不进 git / APK | M |
 
+### v1 发布阻塞（非里程碑工作包）
+
+| ID | 事项 | 说明 |
+| --- | --- | --- |
+| BLOCK-CAS-1 | 打包并默认启用真实 CAS（Symja 或等价 GPL 兼容库）做辅导验算（A4） | **不在 M3 范围**（M3 是错题/FSRS/图谱）。M2 仅有算术烟测引擎 + 反射式 Symja 桥。Symja `matheclipse-core` 3.0.0 ≈ **7.0 MB**；连同 parser/external/apfloat/hipparchus/choco/kryo 等，未压缩依赖合计约 **15–25+ MB**（R8 前），对 APK 体积影响大，需单独工作包评估裁剪/拆分 dex。**`1.0.0` GA 前必须完成**，否则竞品级算错风险不可接受 |
+
 ## v1 · M5a 服务端核心
 
 可与 M0–M3 并行。平板契约以 `api/` 为准。

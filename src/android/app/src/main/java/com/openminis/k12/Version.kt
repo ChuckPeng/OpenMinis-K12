@@ -8,8 +8,8 @@ package com.openminis.k12
  * STAGE 1–8 = milestone pre-release on this X.Y.Z line; 9 = GA.
  */
 object Version {
-    const val NAME = "1.0.0-m2"
-    const val CODE = 1_000_003
+    const val NAME = "1.0.0-m3"
+    const val CODE = 1_000_004
 
     /** Upstream OpenMinis Android baseline recorded at this milestone. */
     const val UPSTREAM_VERSION_NAME = "1.15"
@@ -24,14 +24,14 @@ object Version {
     /** Lowest server `device_api_version` this build will accept. */
     const val DEVICE_API_MIN = 1
 
-    /** Git tag to apply after the M2 PR merges. */
-    const val MILESTONE_TAG = "v1.0.0-m2"
+    /** Git tag to apply after the M3 PR merges. */
+    const val MILESTONE_TAG = "v1.0.0-m3"
 
     fun matchesCodeFormula(): Boolean {
         val major = 1
         val minor = 0
         val patch = 0
-        val stage = 3 // m2
+        val stage = 4 // m3
         return CODE == major * 1_000_000 + minor * 1_000 + patch * 10 + stage
     }
 }

@@ -8,6 +8,25 @@ as defined in `docs/k12/conventions.md` (K12 SemVer is independent of upstream M
 
 ## [Unreleased]
 
+## [1.0.0-m3] - 2026-10-29
+
+Milestone **M3 · Mistakes & FSRS**. Upstream Android baseline: **1.15** (`versionCode` 37).
+
+### Added
+
+- Kotlin port of `open-spaced-repetition/java-fsrs` v1.0.0 (MIT headers retained); py-fsrs cross-check vectors with java-fsrs default weights and fuzzing off (WP-M3-1).
+- Mistake book: `child_id` isolation, five error causes, `pending_check` excluded from stats, FSRS review queue, correction (= independent redo without full reveal), mastery score/levels (S5), push reasons, three-tier variants without web crawl (B1–B4 / WP-M3-2/3).
+- Runtime knowledge-graph install: manifest + sha256 + CC BY-NC-SA 4.0 gate, prereq backtrack; synthetic sample only in assets — no NC / K12-KGraph blobs in git or APK (WP-M3-4, ADR-0011).
+- Acceptance tests `K12M3AcceptanceTest`.
+
+### Changed
+
+- Product SemVer → `1.0.0-m3` / `versionCode` `1000004`.
+
+### Known v1 release blockers
+
+- **Bundle a real CAS (Symja or equivalent) for tutoring math checks (A4).** M3 does not ship Symja: `matheclipse-core` 3.0.0 alone is ~7.0 MB jar, and with parser/external/apfloat/hipparchus/choco/kryo (and further transitives) the uncompressed dependency set is roughly **~15–25+ MB** before dex/R8 — out of M3 mistakes scope and a large APK hit. Until a CAS is wired as `CalcEngines.preferred()`, production still falls back to the arithmetic smoke engine from M2. Must land before `1.0.0` GA.
+
 ## [1.0.0-m2] - 2026-10-29
 
 Milestone **M2 · Photo tutoring & local reveal**. Upstream Android baseline: **1.15** (`versionCode` 37).
@@ -69,7 +88,8 @@ Milestone **M0 · Thin shell**. Upstream Android baseline: **1.15** (`versionCod
 
 - Release keystore material stays out of git; CI fails if a keystore is committed.
 
-[Unreleased]: https://github.com/ChuckPeng/OpenMinis-K12/compare/v1.0.0-m2...HEAD
+[Unreleased]: https://github.com/ChuckPeng/OpenMinis-K12/compare/v1.0.0-m3...HEAD
+[1.0.0-m3]: https://github.com/ChuckPeng/OpenMinis-K12/compare/v1.0.0-m2...v1.0.0-m3
 [1.0.0-m2]: https://github.com/ChuckPeng/OpenMinis-K12/compare/v1.0.0-m1...v1.0.0-m2
 [1.0.0-m1]: https://github.com/ChuckPeng/OpenMinis-K12/compare/v1.0.0-m0...v1.0.0-m1
 [1.0.0-m0]: https://github.com/ChuckPeng/OpenMinis-K12/releases/tag/v1.0.0-m0
