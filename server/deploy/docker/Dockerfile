@@ -12,8 +12,8 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 COPY --from=web /src/web/dist ./web/dist
-ARG VERSION=1.0.0-m5b
-ARG VERSION_CODE=1000006
+ARG VERSION=1.0.0-rc.1
+ARG VERSION_CODE=1000007
 ARG GIT_COMMIT=unknown
 ARG UPSTREAM_VERSION=1.15
 RUN CGO_ENABLED=0 go build -trimpath \

@@ -47,6 +47,7 @@ Transitive packages (pinned in `Package.resolved`), all **Apache-2.0**, maintain
 | ACRA (acra-core) | 5.12.0 | **Apache-2.0** |
 | Shizuku API + provider (dev.rikka.shizuku) | 13.1.5 | **MIT** |
 | RealTimeCutVADLibraryForAndroid (helloooideeeeea) | 1.0.5 | **MIT** — bundles ONNX Runtime (**MIT**) and WebRTC audio processing (**BSD-3-Clause**) |
+| Symja (`org.matheclipse:matheclipse-core`, `matheclipse-parser`, `matheclipse-external`) | 3.2.0 | **LGPL-3.0**. Source: [axkr/symja_android_library](https://github.com/axkr/symja_android_library) tag `v3.2.0`. These three Maven modules have been LGPL-3.0 since 3.1.1. An unmodified LGPL-3.0 library may be conveyed inside this GPL-3.0 program. `matheclipse-external` bundles JAS (`edu.jas`, Heinz Kredel; upstream is GPL or LGPL, and the project also dual-licenses the bytecode under Apache-2.0 for Android), Cream (LGPL-2.1-or-later), SnuggleTeX (BSD), and Tablesaw fragments (Apache-2.0). Direct transitives used by the tutoring path include Hipparchus and apfloat (Apache-2.0), Guava `33.6.0-android` (Apache-2.0; the published `-jre` variant is excluded), Apache Commons (Apache-2.0), log4j-api (Apache-2.0) routed through `log4j-to-slf4j` to `slf4j-nop` (MIT) |
 
 Test-only dependencies: JUnit 4.13.2 (**EPL-1.0**), MockWebServer 4.12.0 (**Apache-2.0**), kotlinx-coroutines-test 1.9.0 (**Apache-2.0**), org.json 20231013 (**Public Domain / JSON License**), sqlite-jdbc 3.41.2.2 (**Apache-2.0**), Robolectric 4.17 (**MIT**).
 

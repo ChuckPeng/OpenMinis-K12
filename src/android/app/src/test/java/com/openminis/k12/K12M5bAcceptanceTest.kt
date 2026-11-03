@@ -40,10 +40,11 @@ class K12M5bAcceptanceTest {
 
     @Test
     fun versionAndChangelogAreM5b() {
-        assertEquals("1.0.0-m5b", Version.NAME)
-        assertEquals(1_000_006, Version.CODE)
+        // M5b shipped 1.0.0-m5b / 1000006. Later pre-releases only move forward.
+        assertTrue(Version.NAME.startsWith("1.0.0"))
+        assertTrue(Version.CODE >= 1_000_006)
         assertTrue(Version.matchesCodeFormula())
-        assertEquals("v1.0.0-m5b", Version.MILESTONE_TAG)
+        assertEquals("v${Version.NAME}", Version.MILESTONE_TAG)
 
         val changelog = repoFile("CHANGELOG.md").readText()
         assertTrue(changelog.contains("## [1.0.0-m5b]"))

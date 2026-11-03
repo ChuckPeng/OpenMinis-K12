@@ -58,6 +58,8 @@ jobs:
             --tests com.openminis.k12.K12M3AcceptanceTest \
             --tests com.openminis.k12.K12M5aAcceptanceTest \
             --tests com.openminis.k12.K12M5bAcceptanceTest \
+            --tests com.openminis.k12.K12CasA4AcceptanceTest \
+            --tests com.openminis.k12.K12CasMainThreadTest \
             --tests com.openminis.app.KeepScreenOnOrientationTest \
             --tests com.openminis.app.agent.shell.BashismDetectorTest \
             --stacktrace

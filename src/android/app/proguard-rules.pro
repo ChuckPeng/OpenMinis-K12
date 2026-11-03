@@ -26,3 +26,29 @@
 # NOTE FOR VERIFICATION: debug builds don't minify, so this bug is invisible
 # there. Any change here must be checked against an assembleRelease APK.
 -keep class io.codeconcept.realtimecutvadlibrary.** { *; }
+
+# Symja 3.2.0 (tutoring A4). Builtins and JAS call each other through
+# generated tables and occasional reflection. Keep the engine, and let R8
+# shrink Guava / fastutil / Hipparchus down to what those classes reach.
+# java.awt / ImageIO / JMX are only referenced from plotting and desktop
+# helpers that the tutoring path does not load.
+-keep class org.matheclipse.** { *; }
+-keep class edu.jas.** { *; }
+-keep class uk.ac.ed.ph.snuggletex.** { *; }
+-dontwarn java.awt.**
+-dontwarn javax.imageio.**
+-dontwarn java.lang.management.**
+-dontwarn javax.tools.**
+-dontwarn javax.script.**
+-dontwarn org.osgi.**
+-dontwarn sun.misc.**
+-dontwarn com.google.errorprone.annotations.**
+-dontwarn org.codehaus.mojo.animal_sniffer.**
+-dontwarn org.apache.logging.log4j.core.**
+-dontwarn org.apache.logging.log4j.util.ProcessIdUtil
+-dontwarn afu.org.checkerframework.**
+-dontwarn com.google.j2objc.annotations.**
+-dontwarn javax.annotation.**
+-dontwarn edu.umd.cs.findbugs.annotations.**
+-dontwarn java.rmi.**
+-dontwarn javax.lang.model.**

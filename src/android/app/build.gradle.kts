@@ -48,10 +48,14 @@ android {
         targetSdk = 35
         // K12 SemVer — independent of upstream. See docs/k12/conventions.md
         // and com.openminis.k12.Version. Upstream baseline was 1.15 / 37.
-        versionCode = 1_000_006
-        versionName = "1.0.0-m5b"
+        versionCode = 1_000_007
+        versionName = "1.0.0-rc.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // Symja (matheclipse-core) is far past the 64K method ceiling. minSdk 26
+        // loads multidex from the platform; the flag tells AGP to split dex files.
+        multiDexEnabled = true
 
         // DEV_TOOLS gates the on-device developer tooling (127.0.0.1:5321
         // debug server, LLM request log, StreamJitterProbe markers). It is
@@ -251,6 +255,34 @@ android {
         // a fixed detector (tracked at issuetracker.google.com/388538014).
         checkReleaseBuilds = false
         disable += "NonNullableMutableLiveData"
+    }
+
+    // Symja and its transitive jars ship overlapping META-INF license files.
+    packaging {
+        resources {
+            excludes += listOf(
+                "META-INF/LICENSE",
+                "META-INF/LICENSE.txt",
+                "META-INF/LICENSE.md",
+                "META-INF/NOTICE",
+                "META-INF/NOTICE.txt",
+                "META-INF/NOTICE.md",
+                "META-INF/DEPENDENCIES",
+                "META-INF/AL2.0",
+                "META-INF/LGPL2.1",
+                "META-INF/INDEX.LIST",
+                "META-INF/io.netty.versions.properties",
+                // Symja's external jar and jgrapht-io both ship the same GraphML
+                // schemas. Tutoring never reads them.
+                "graphml.xsd",
+                "gexf.xsd",
+                "viz.xsd",
+                "xlink.xsd",
+                "META-INF/DUMMY.SF",
+                "META-INF/DUMMY.DSA",
+                "META-INF/versions/9/OSGI-INF/MANIFEST.MF",
+            )
+        }
     }
 }
 
@@ -551,4 +583,22 @@ dependencies {
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
     androidTestImplementation("junit:junit:4.13.2")
+
+    // Tutoring A4 (BLOCK-CAS-1). symja_android_library 3.2.0.
+    // matheclipse-core / parser / external are LGPL-3.0 (since 3.1.1) and are
+    // combined into this GPL-3.0 app. The JRE guava variant pulls JDK-only
+    // APIs, so it is replaced with the Android build of the same release.
+    // log4j-api has no provider on Android; route it at slf4j-nop so class
+    // init does not look for log4j-core.
+    implementation("org.matheclipse:matheclipse-core:3.2.0") {
+        exclude(group = "com.google.guava", module = "guava")
+    }
+    implementation("com.google.guava:guava:33.6.0-android")
+    implementation("org.apache.logging.log4j:log4j-to-slf4j:2.25.4")
+    implementation("org.slf4j:slf4j-nop:2.0.17")
+}
+
+tasks.withType<Test>().configureEach {
+    // First Symja init loads the builtin table. 512m test workers OOM.
+    maxHeapSize = "1g"
 }

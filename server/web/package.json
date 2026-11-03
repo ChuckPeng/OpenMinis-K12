@@ -1,7 +1,7 @@
 {
   "name": "openminis-k12-admin",
   "private": true,
-  "version": "1.0.0-m5b",
+  "version": "1.0.0-rc.1",
   "type": "module",
   "scripts": {
     "dev": "vite",

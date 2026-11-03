@@ -8,6 +8,33 @@ as defined in `docs/k12/conventions.md` (K12 SemVer is independent of upstream M
 
 ## [Unreleased]
 
+## [1.0.0-rc.1] - 2026-11-03
+
+Release candidate after M5b. Clears the last v1 code blocker before `1.0.0` GA. Upstream Android baseline remains **1.15** (`versionCode` 37). Product SemVer `1.0.0-rc.1` / `versionCode` `1000007` (STAGE 7).
+
+### Added
+
+- On-device Symja CAS for tutoring A4 (`org.matheclipse:matheclipse-core:3.2.0`, with `matheclipse-parser` and `matheclipse-external`). `CalcEngines.preferred()` is `SymjaCalcEngine`. Numeric checks, expression equivalence, simplification, factoring, and univariate solution sets (order-insensitive) run on Symja. The arithmetic smoke engine remains for tests that pass it explicitly.
+- Guards: length 512, nesting 32, an allow-list of arithmetic heads (so `While`, `Set`, `Import`, and compound expressions are not evaluated), non-finite results, a 2s per-check budget, and at most four discarded engines. A timed-out engine is dropped so the next check can run. Loading happens on a daemon thread; the Android main thread gets `main-thread` and the tutoring path records tool-unavailable instead of blocking.
+- Acceptance tests `K12CasA4AcceptanceTest` and `K12CasMainThreadTest` (wired into `.github/workflows/android.yml`).
+
+### Changed
+
+- Product SemVer → `1.0.0-rc.1` / `versionCode` `1000007`.
+- **BLOCK-CAS-1 resolved.** Maven modules `matheclipse-core`, `matheclipse-parser`, and `matheclipse-external` 3.2.0 are **LGPL-3.0** (Symja relicensed those modules in 3.1.1). LGPL-3.0 can be combined into this GPL-3.0 app; the library is unmodified and its source is the Symja tag `v3.2.0`. Class files are Java 11 bytecode, built with the repo's Java 17 toolchain. `minSdk` stays 26. Guava is forced to `33.6.0-android`. Multidex is explicit. R8 keeps `org.matheclipse.**` and `edu.jas.**` and may shrink the rest. The APK growth and the LGPL dependency are accepted.
+- Equation solutions are real by default. `x^2+1==0` is `{}` (no real solution), not `{-I, I}`. `CasField.COMPLEX` keeps non-real roots. `CasPolicy` honors that only for `StudyStage.SENIOR` when the setting is on; the setting defaults off, and primary or junior stay real.
+- Equivalence is over the reals. A domain hole or radicand that only one side has is `CalcEquivalence.Restricted` (for example `x!=1`, `x!=0`, `x!=-2`, `x>=0`) and is not a full match. Identical domains still match.
+- On-device or emulator confirmation of CAS startup is deferred. This version is checked with JVM unit tests and Robolectric.
+
+### APK size
+
+Measured locally against main `156b68c` (arm64-v8a, debug keystore, `assembleDebug` / `assembleRelease`):
+
+- Debug APK: 55,104,438 → 72,650,370 bytes (+17,545,932, +16.7 MiB). Dex files 20 → 23. Method ids 296,911 → 539,344 (R8 off).
+- Release APK (R8): 25,795,147 → 33,550,633 bytes (+7,755,486, +7.4 MiB). Dex files 1 → 2. Method ids 46,006 → 115,444. `minSdk` 26 loads the extra dex without a multidex support library.
+
+Uncompressed Maven jars for the Symja tree are on the order of 40 MB before dex and R8. R8 keeps `org.matheclipse.**` and `edu.jas.**`, which is most of the release growth. `assets/org/hipparchus/random/new-joe-kuo-6.21201` is about 692 KiB compressed and is not used by A4. Plotting code that references `java.awt` is not on the tutoring path; those references are `-dontwarn`'d.
+
 ## [1.0.0-m5b] - 2026-10-30
 
 Milestone **M5b · Tablet Integration & Device API**. Upstream Android baseline: **1.15** (`versionCode` 37). Product SemVer `1.0.0-m5b` / `versionCode` `1000006` (shared between Android and Go server).
@@ -134,7 +161,8 @@ Milestone **M0 · Thin shell**. Upstream Android baseline: **1.15** (`versionCod
 
 - Release keystore material stays out of git; CI fails if a keystore is committed.
 
-[Unreleased]: https://github.com/ChuckPeng/OpenMinis-K12/compare/v1.0.0-m3...HEAD
+[Unreleased]: https://github.com/ChuckPeng/OpenMinis-K12/compare/v1.0.0-rc.1...HEAD
+[1.0.0-rc.1]: https://github.com/ChuckPeng/OpenMinis-K12/compare/v1.0.0-m5b...v1.0.0-rc.1
 [1.0.0-m3]: https://github.com/ChuckPeng/OpenMinis-K12/compare/v1.0.0-m2...v1.0.0-m3
 [1.0.0-m2]: https://github.com/ChuckPeng/OpenMinis-K12/compare/v1.0.0-m1...v1.0.0-m2
 [1.0.0-m1]: https://github.com/ChuckPeng/OpenMinis-K12/compare/v1.0.0-m0...v1.0.0-m1
