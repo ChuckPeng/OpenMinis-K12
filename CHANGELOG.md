@@ -8,6 +8,25 @@ as defined in `docs/k12/conventions.md` (K12 SemVer is independent of upstream M
 
 ## [Unreleased]
 
+## [1.0.0-m2] - 2026-10-29
+
+Milestone **M2 · Photo tutoring & local reveal**. Upstream Android baseline: **1.15** (`versionCode` 37).
+
+### Added
+
+- Reveal state machine `confirm → guide → hint → step → reveal` (G1) with jailbreak no-ops (G2, A7).
+- Stem-confirm gate (A1); hint chain + three approach variants (A2/A3/A5/A6).
+- Local reveal auth: parent PIN + optional TOTP offline (G3, G4); M2 request path shows PIN (remote in M5b).
+- Leak guard for pre-reveal finals / choices / formulae; fixed block line per T-36.
+- Calc check path (A4): model vs tool mismatch → `不确定` / `pending_check`. Arithmetic engine for CI; reflective Symja bridge when the class is present.
+- Local study events: session, stem_confirmed, attempt, hint_used, answer_reveal, calc_checked (no question text).
+- H-09 one-line `buildSystemPrompt` hook via `TutoringRuntime.promptSuffix()`.
+- Acceptance tests `K12M2AcceptanceTest`.
+
+### Changed
+
+- Product SemVer → `1.0.0-m2` / `versionCode` `1000003`.
+
 ## [1.0.0-m1] - 2026-10-29
 
 Milestone **M1 · Three-tier skills & course catalog**. Upstream Android baseline: **1.15** (`versionCode` 37).
@@ -50,6 +69,7 @@ Milestone **M0 · Thin shell**. Upstream Android baseline: **1.15** (`versionCod
 
 - Release keystore material stays out of git; CI fails if a keystore is committed.
 
-[Unreleased]: https://github.com/ChuckPeng/OpenMinis-K12/compare/v1.0.0-m1...HEAD
+[Unreleased]: https://github.com/ChuckPeng/OpenMinis-K12/compare/v1.0.0-m2...HEAD
+[1.0.0-m2]: https://github.com/ChuckPeng/OpenMinis-K12/compare/v1.0.0-m1...v1.0.0-m2
 [1.0.0-m1]: https://github.com/ChuckPeng/OpenMinis-K12/compare/v1.0.0-m0...v1.0.0-m1
 [1.0.0-m0]: https://github.com/ChuckPeng/OpenMinis-K12/releases/tag/v1.0.0-m0

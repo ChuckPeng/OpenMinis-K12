@@ -16519,6 +16519,9 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
                 append("\n\n")
                 append(dailyMemoryFragment)
             }
+            // [K12 H-09] One-line hook: layer + prohibitions only. Teaching
+            // rules stay in study-companion-core / subject skills.
+            append(com.openminis.k12.tutoring.TutoringRuntime.promptSuffix())
             // Runtime context goes last so the prefix above stays byte-stable
             // across requests within the same day. Keep ordering deterministic
             // (date → tz → lang → model count) — any reorder defeats the cache.

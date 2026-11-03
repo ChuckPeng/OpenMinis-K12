@@ -54,6 +54,7 @@ jobs:
             :app:testGithubDebugUnitTest \
             --tests com.openminis.k12.K12M0AcceptanceTest \
             --tests com.openminis.k12.K12M1AcceptanceTest \
+            --tests com.openminis.k12.K12M2AcceptanceTest \
             --tests com.openminis.app.KeepScreenOnOrientationTest \
             --tests com.openminis.app.agent.shell.BashismDetectorTest \
             --stacktrace
