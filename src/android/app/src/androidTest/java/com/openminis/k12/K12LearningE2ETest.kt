@@ -950,19 +950,30 @@ class K12LearningE2ETest {
     private fun swipeUntil(text: String) {
         dismissAnr()
         closeKeyboard()
-        if (onScreen(text)) return
-        // The label is often already in the tree, below the fold. Asking the
-        // framework to show it scrolls the parent column on API 30, where a
-        // swipe that starts on a text field does not.
-        repeat(4) {
-            if (showOnScreen(text) && onScreen(text)) return
-            flick(revealLower = true)
-            if (onScreen(text)) return
+        if (broughtOnScreen(text)) return
+        // Show-on-screen reaches 锁定并离开 on API 30. A following sweep back
+        // to the top hid it again on API 34, so only nudge toward the label.
+        repeat(8) {
+            showOnScreen(text)
+            if (broughtOnScreen(text)) return
+            nudgeToward(text)
+            if (broughtOnScreen(text)) return
         }
-        repeat(6) {
-            flick(revealLower = false)
-            if (showOnScreen(text) && onScreen(text)) return
-            if (onScreen(text)) return
+    }
+
+    /** Center of the label is on the display, so a click can land on it. */
+    private fun broughtOnScreen(text: String): Boolean {
+        if (onScreen(text)) return true
+        val bounds = runCatching { device.findObject(By.text(text))?.visibleBounds }?.getOrNull() ?: return false
+        val cy = bounds.centerY()
+        return bounds.height() > 0 && cy in 8 until device.displayHeight - 8
+    }
+
+    private fun nudgeToward(text: String) {
+        val cy = runCatching { device.findObject(By.text(text))?.visibleBounds?.centerY() }?.getOrNull()
+        when {
+            cy == null || cy >= device.displayHeight - 8 -> flick(revealLower = true)
+            cy <= 8 -> flick(revealLower = false)
         }
     }
 
