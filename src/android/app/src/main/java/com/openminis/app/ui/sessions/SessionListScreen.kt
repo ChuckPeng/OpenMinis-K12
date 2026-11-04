@@ -162,7 +162,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalContext
@@ -1902,7 +1901,6 @@ private fun DualFabRow(
                 containerColor = minisFabColor(),
                 modifier = Modifier
                     .size(56.dp)
-                    .semantics { contentDescription = "New Chat" }
                     // [T-newchat-fab-shadow] The shadow goes FIRST, outside the clip
                     // below: a shadow drawn after `.clip(CircleShape)` (and the FAB's
                     // own elevation shadow, drawn inside the Surface) falls outside

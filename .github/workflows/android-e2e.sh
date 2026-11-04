@@ -116,6 +116,13 @@ adb shell 'while [ "$(getprop sys.boot_completed)" != "1" ]; do sleep 1; done'
 adb install -r -t "$APK"
 adb install -r -t "$TEST_APK"
 adb shell cmd uimode night yes || true
+adb shell settings put global hidden_api_policy 1 || true
+adb shell settings put global window_animation_scale 0 || true
+adb shell settings put global transition_animation_scale 0 || true
+adb shell settings put global animator_duration_scale 0 || true
+adb shell settings put global hide_error_dialogs 1 || true
+adb shell settings put secure anr_show_background 0 || true
+adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS || true
 adb shell wm size | tee "$ART/display-api${API_LEVEL}.txt"
 adb shell wm density | tee -a "$ART/display-api${API_LEVEL}.txt"
 

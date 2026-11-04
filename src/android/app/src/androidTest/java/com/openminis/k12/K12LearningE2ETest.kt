@@ -121,10 +121,10 @@ class K12LearningE2ETest {
         setField(BACKUP, "e2e-pass")
         setField(BACKUP_AGAIN, "e2e-pass")
         clickText(NEXT)
-        waitText(PERM_LATER, 15_000)
+        assertNotNull("secrets were rejected", waitText(PERM_LATER, 15_000))
         shot("04-permissions")
         clickText(NEXT)
-        waitText(PAIR_TITLE, 15_000)
+        assertNotNull("pairing form did not open", waitText(PAIR_TITLE, 15_000))
         fillPairing(baseUrl, code)
         clickText(BIND)
         waitText(WAIT_TITLE, 30_000)
@@ -138,10 +138,7 @@ class K12LearningE2ETest {
         assertTrue("child id was not a v4", childId.length >= 32)
         admin.approve(deviceId)
         admin.putTabletModel(modelUrl)
-        assertNotNull(waitAny(listOf(EMPTY_CHAT, WAIT_MODEL), 90_000))
-        if (device.findObject(By.text(WAIT_MODEL)) != null) {
-            assertNotNull(waitText(EMPTY_CHAT, 60_000))
-        }
+        assertNotNull("empty chat did not open after the model arrived", waitText(EMPTY_CHAT, 90_000))
         shot("07-sessions")
         assertEquals("active", K12Runtime.snapshot().profile.pairing)
         assertModelApplied(modelUrl)
@@ -402,25 +399,34 @@ class K12LearningE2ETest {
     }
 
     private fun setField(label: String, value: String) {
+        dismissAnr()
+        closeKeyboard()
         swipeUntil(label)
-        val nodes = device.findObjects(By.text(label))
-        val labelNode = nodes.lastOrNull() ?: die("field label missing: $label")
-        labelNode.click()
-        device.waitForIdle(400)
-        val focused = device.findObject(By.focused(true))
-        if (focused != null && focused.className.contains("Edit")) {
-            focused.setText(value)
-            closeKeyboard()
-            return
-        }
-        val edits = device.findObjects(By.clazz("android.widget.EditText"))
-        val target = edits.lastOrNull { it.visibleBounds.top >= labelNode.visibleBounds.top - 8 }
-            ?: edits.lastOrNull()
-            ?: die("no edit for $label")
+        val labelNode = device.findObjects(By.text(label)).lastOrNull()
+            ?: die("field label missing: $label")
+        val target = editBelow(labelNode) ?: die("no edit for $label")
         target.click()
+        device.waitForIdle(200)
         target.setText(value)
+        device.waitForIdle(300)
+        var shown = editBelow(labelNode)?.text.orEmpty()
+        if (!shown.contains(value.take(4))) {
+            val again = editBelow(labelNode) ?: die("no edit for $label")
+            again.click()
+            again.setText("")
+            InstrumentationRegistry.getInstrumentation().sendStringSync(value)
+            device.waitForIdle(300)
+            shown = editBelow(labelNode)?.text.orEmpty()
+        }
+        if (!shown.contains(value.take(4))) die("field $label held '$shown'")
         closeKeyboard()
     }
+
+    /** The field this label belongs to. The lowest edit on the form is a different field. */
+    private fun editBelow(labelNode: UiObject2): UiObject2? =
+        device.findObjects(By.clazz("android.widget.EditText"))
+            .filter { it.visibleBounds.height() > 0 }
+            .minByOrNull { kotlin.math.abs(it.visibleBounds.centerY() - labelNode.visibleBounds.centerY()) }
 
     private fun chooseStage(label: String) {
         swipeUntil(label)
@@ -448,8 +454,8 @@ class K12LearningE2ETest {
         while (System.currentTimeMillis() < deadline) {
             for (desc in descs) {
                 val node = device.findObject(By.desc(desc))
-                if (node != null) {
-                    node.click()
+                if (node != null && node.visibleBounds.height() > 0) {
+                    clickableOf(node).click()
                     device.waitForIdle(700)
                     return
                 }
@@ -472,10 +478,28 @@ class K12LearningE2ETest {
     }
 
     private fun clickDesc(desc: String) {
-        val node = device.wait(Until.findObject(By.desc(desc)), 15_000)
-            ?: die("missing desc $desc")
-        node.click()
-        device.waitForIdle(700)
+        val deadline = System.currentTimeMillis() + 20_000
+        while (System.currentTimeMillis() < deadline) {
+            val node = device.findObject(By.desc(desc))
+            if (node != null && node.visibleBounds.height() > 0) {
+                clickableOf(node).click()
+                device.waitForIdle(700)
+                return
+            }
+            device.waitForIdle(300)
+        }
+        die("missing desc $desc")
+    }
+
+    /** The icon that carries "New Chat" is not itself clickable. The button around it is. */
+    private fun clickableOf(node: UiObject2): UiObject2 {
+        var current: UiObject2? = node
+        var guard = 0
+        while (current != null && guard++ < 6) {
+            if (current.isClickable) return current
+            current = runCatching { current.parent }.getOrNull()
+        }
+        return node
     }
 
     private fun waitText(text: String, timeout: Long): UiObject2? {
@@ -511,8 +535,17 @@ class K12LearningE2ETest {
         return null
     }
 
-    private fun waitEdit(timeout: Long): UiObject2? =
-        device.wait(Until.findObject(By.clazz("android.widget.EditText")), timeout)
+    private fun waitEdit(timeout: Long): UiObject2? {
+        val deadline = System.currentTimeMillis() + timeout
+        while (System.currentTimeMillis() < deadline) {
+            device.findObjects(By.clazz("android.widget.EditText"))
+                .lastOrNull { it.visibleBounds.height() > 0 }
+                ?.let { return it }
+            device.findObject(By.textContains("Message"))?.let { return it }
+            device.waitForIdle(400)
+        }
+        return null
+    }
 
     /**
      * The CI emulator is 320×640. A form taller than that puts the action

@@ -41,7 +41,7 @@ class K12SyncPrefs(context: Context) {
             .remove(KEY_PENDING_DEVICE)
             .remove(KEY_PENDING_CHILD)
             .remove(KEY_PENDING_CERT)
-            .apply()
+            .commit()
     }
 
     fun loadPending(): PairingOutcome.Pending? {
