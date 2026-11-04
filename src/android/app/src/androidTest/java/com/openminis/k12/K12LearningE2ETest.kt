@@ -336,12 +336,23 @@ class K12LearningE2ETest {
             runCatching { again.click() }
             InstrumentationRegistry.getInstrumentation().sendStringSync(text)
         }
-        clickDesc("Send")
+        closeKeyboard()
+        if (!clickDesc("Send", required = false)) {
+            val field = waitEdit(3_000)
+            val bounds = field?.let { runCatching { Rect(it.visibleBounds) }.getOrNull() }
+            if (bounds == null) die("missing desc Send; on screen: ${visibleTexts()}")
+            // The send control sits on the composer's right edge.
+            val x = (bounds.right - 20).coerceIn(1, device.displayWidth - 2)
+            val y = bounds.centerY().coerceIn(1, device.displayHeight - 2)
+            device.click(x, y)
+            device.waitForIdle(400)
+        }
     }
 
     private fun openChatAgain() {
-        if (device.findObject(By.desc("Send")) != null) return
-        if (device.findObject(By.desc("New Chat")) == null) {
+        val send = runCatching { device.findObject(By.desc("Send")) }.getOrNull()
+        if (send != null && visible(send)) return
+        if (runCatching { device.findObject(By.desc("New Chat")) }.getOrNull()?.let { visible(it) } != true) {
             device.pressBack()
             device.waitForIdle(800)
         }
@@ -672,7 +683,7 @@ class K12LearningE2ETest {
             }
             device.waitForIdle(300)
         }
-        if (required) die("missing desc $desc")
+        if (required) die("missing desc $desc; on screen: ${visibleTexts()}")
         return false
     }
 
