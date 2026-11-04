@@ -52,6 +52,10 @@ func (s *Server) listDevices(w http.ResponseWriter, r *http.Request) {
 		if d.LastSeen.Valid {
 			item["last_seen"] = d.LastSeen.String
 		}
+		usage, usageErr := s.Store.GetUsage(r.Context(), d.ChildID, deviceapi.LocalDateInShanghai(time.Now().UnixMilli()))
+		if usageErr == nil && usage != nil {
+			item["companion_minutes"] = usage.CompanionMinutes
+		}
 		out = append(out, item)
 	}
 	httpx.WriteJSON(w, http.StatusOK, out)

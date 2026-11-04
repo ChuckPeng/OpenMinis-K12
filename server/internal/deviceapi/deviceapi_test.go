@@ -712,3 +712,83 @@ func TestSignedReportLinkAccessAndInvalidation(t *testing.T) {
 		t.Fatalf("revoked link must 404, got %d", rec3.Code)
 	}
 }
+
+func TestRepairSamePubkeyReusesDevice(t *testing.T) {
+	h, cleanup := newTestHarness(t)
+	defer cleanup()
+	handler := h.server.Handler()
+	pub := base64.StdEncoding.EncodeToString(h.devPub)
+
+	firstID := pairWithCode(t, h, handler, "111111", pub, h.childID)
+	againID := pairWithCode(t, h, handler, "222222", pub, h.childID)
+	if againID != firstID {
+		t.Fatalf("pending re-pair created %s instead of reusing %s", againID, firstID)
+	}
+	devices, err := h.store.ListDevices(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(devices) != 1 {
+		t.Fatalf("expected one device row, got %d", len(devices))
+	}
+
+	if err := h.store.UpdateDeviceStatus(context.Background(), firstID, "active"); err != nil {
+		t.Fatal(err)
+	}
+	activeID := pairWithCode(t, h, handler, "333333", pub, h.childID)
+	if activeID != firstID {
+		t.Fatalf("active re-pair created %s instead of reusing %s", activeID, firstID)
+	}
+	got, err := h.store.GetDevice(context.Background(), firstID)
+	if err != nil || got == nil || got.Status != "active" {
+		t.Fatalf("reused device should stay active: %+v %v", got, err)
+	}
+
+	otherPub, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := json.Marshal(map[string]any{
+		"pair_code":     "444444",
+		"device_pubkey": base64.StdEncoding.EncodeToString(otherPub),
+		"label":         "学生平板",
+		"child_id":      h.childID,
+	})
+	if err := h.store.CreatePairCode(context.Background(), h.familyID, "444444", 10*time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/device/pair", bytes.NewReader(body)))
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("different key on an active child must 409, got %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+func pairWithCode(t *testing.T, h *testHarness, handler http.Handler, code, pub, childID string) string {
+	t.Helper()
+	if err := h.store.CreatePairCode(context.Background(), h.familyID, code, 10*time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	body, _ := json.Marshal(map[string]any{
+		"pair_code":     code,
+		"device_pubkey": pub,
+		"label":         "学生平板",
+		"child_id":      childID,
+	})
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/device/pair", bytes.NewReader(body)))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("pair %s failed: %d %s", code, rec.Code, rec.Body.String())
+	}
+	var resp struct {
+		DeviceID string `json:"device_id"`
+		Status   string `json:"status"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.DeviceID == "" {
+		t.Fatal("missing device id")
+	}
+	return resp.DeviceID
+}

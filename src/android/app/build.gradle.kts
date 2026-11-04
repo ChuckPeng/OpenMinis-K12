@@ -48,8 +48,8 @@ android {
         targetSdk = 35
         // K12 SemVer — independent of upstream. See docs/k12/conventions.md
         // and com.openminis.k12.Version. Upstream baseline was 1.15 / 37.
-        versionCode = 1_000_011
-        versionName = "1.0.0-rc.5"
+        versionCode = 1_000_012
+        versionName = "1.0.0-rc.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -595,6 +595,7 @@ dependencies {
     androidTestImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
     androidTestImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.uiautomator:uiautomator:2.3.0")
+    androidTestImplementation("androidx.test.espresso:espresso-intents:3.6.1")
 
     // Tutoring A4 (BLOCK-CAS-1). symja_android_library 3.2.0.
     // matheclipse-core / parser / external are LGPL-3.0 (since 3.1.1) and are

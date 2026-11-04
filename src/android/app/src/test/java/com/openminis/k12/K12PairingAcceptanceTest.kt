@@ -117,6 +117,14 @@ class K12PairingAcceptanceTest {
         val refreshed = client.poll(outcome as PairingOutcome.Pending)
         assertTrue(refreshed is PairingOutcome.Pending)
         assertFalse(activated)
+        var waited = false
+        val longPoll = client { _, url, _ ->
+            waited = url.contains("wait=10")
+            jsonBody("""{"status":"active","changed":true}""")
+        }
+        val active = longPoll.poll(outcome as PairingOutcome.Pending, waitSeconds = 10)
+        assertTrue(waited)
+        assertTrue(active is PairingOutcome.Active)
         DevicePairing.onActivated = null
     }
 

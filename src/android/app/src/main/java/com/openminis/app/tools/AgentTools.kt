@@ -50,8 +50,11 @@ object AgentTools {
         // not a sub agent, an interactive run). Not in the list = does not
         // exist: no schema, no prompt line, no retries on it. Last, as on iOS.
         userAskExposed: Boolean = false,
+        // K12 tablets expose the on-device Symja calculator. Other builds omit it.
+        k12CalcEnabled: Boolean = false,
     ): List<AgentToolDefinition> = buildList {
         add(shellExecuteDefinition())
+        if (k12CalcEnabled) add(k12CalcDefinition())
         add(FileReadTool.definition())
         add(FileWriteTool.definition())
         add(FileEditTool.definition())
@@ -68,6 +71,16 @@ object AgentTools {
         }
         if (userAskExposed && !isHelper) add(com.openminis.app.agent.userask.UserAskPromptText.definition())
     }
+
+    private fun k12CalcDefinition() = AgentToolDefinition(
+        name = com.openminis.k12.tutoring.K12CalcTool.NAME,
+        description = "Evaluate a numeric or algebraic expression on this tablet. Use this for arithmetic, simplification, and equation checks. Do not invent a numeric result without calling it.",
+        parameters = mapOf(
+            "expression" to AgentToolParam("string", "Expression such as 2+2 or x^2-1"),
+            "tool_title" to AgentToolParam("string", "Short title for the tool row"),
+        ),
+        required = listOf("expression"),
+    )
 
     /**
      * [T-sub-agents-v1] The one sub agent tool: delegate, and inspect or stop

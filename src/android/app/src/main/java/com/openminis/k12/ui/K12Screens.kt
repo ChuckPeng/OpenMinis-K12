@@ -33,8 +33,10 @@ import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.unit.dp
 import com.openminis.app.R
 import com.openminis.k12.OnboardingStep
@@ -44,6 +46,8 @@ import com.openminis.k12.ScreenTime
 import com.openminis.k12.SecretSubmit
 import com.openminis.k12.StudyStage
 import com.openminis.k12.android.K12Runtime
+import com.openminis.k12.android.K12StudyDesk
+import com.openminis.k12.skills.K12SkillBundle
 
 @Composable
 fun K12BreakBannerHost() {
@@ -289,7 +293,12 @@ fun K12ParentScreen(
     val managed = k12ModelManagedNow()
     K12Surface {
     Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .semantics { testTagsAsResourceId = true }
+            .testTag("k12_parent_column")
+            .verticalScroll(rememberScrollState())
+            .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(
@@ -298,6 +307,14 @@ fun K12ParentScreen(
             modifier = Modifier.semantics { heading() },
         )
         Text(stringResource(R.string.k12_parent_backup_set))
+        if (K12SkillBundle.readAsset(LocalContext.current, K12SkillBundle.CORE_ASSET) != null) {
+            Text(stringResource(R.string.k12_skill_line))
+        }
+        val due = K12StudyDesk.revision.value.let {
+            K12StudyDesk.dueCount(snap.profile.childId.orEmpty())
+        }
+        if (due > 0) Text(stringResource(R.string.k12_review_due, due))
+        if (K12StudyDesk.linkedKnowledge()) Text(stringResource(R.string.k12_kp_linked))
         Text(
             stringResource(R.string.k12_parent_model_status) + " · " +
                 stringResource(if (managed) R.string.k12_parent_model_managed else R.string.k12_parent_model_local),
@@ -317,7 +334,13 @@ fun K12ParentScreen(
         OutlinedButton(onClick = { K12Runtime.touch(); K12Runtime.grantWhileUnlocked() }, modifier = Modifier.fillMaxWidth()) {
             Text(stringResource(R.string.k12_parent_extend))
         }
-        Button(onClick = { K12Runtime.touch(); onPermissions() }, modifier = Modifier.fillMaxWidth()) {
+        Button(
+            onClick = { K12Runtime.touch(); onPermissions() },
+            modifier = Modifier
+                .fillMaxWidth()
+                .semantics { testTagsAsResourceId = true }
+                .testTag("k12_parent_permissions"),
+        ) {
             Text(stringResource(R.string.k12_perm_title))
         }
         Button(onClick = { K12Runtime.touch(); onModelKey() }, modifier = Modifier.fillMaxWidth()) {
@@ -330,7 +353,13 @@ fun K12ParentScreen(
         LaterRow(stringResource(R.string.k12_parent_totp))
         LaterRow(stringResource(R.string.k12_parent_catalog))
         LaterRow(stringResource(R.string.k12_parent_unlock))
-        OutlinedButton(onClick = onExit, modifier = Modifier.fillMaxWidth()) {
+        OutlinedButton(
+            onClick = onExit,
+            modifier = Modifier
+                .fillMaxWidth()
+                .semantics { testTagsAsResourceId = true }
+                .testTag("k12_parent_lock"),
+        ) {
             Text(stringResource(R.string.k12_parent_lock))
         }
     }

@@ -17,7 +17,7 @@ object PairingText {
     const val NO_KEY = "无法生成这台平板的签名密钥。请再试一次。如果仍然失败，请先解除绑定后再绑定。"
     const val NO_CHILD = "还没有这台平板的编号。请先完成第一次设置。"
     const val QR_MISS = "没有识别到配对二维码。"
-    const val PENDING = "已提交，请家长在管理页确认后再点刷新。"
+    const val PENDING = "已提交，等家长在管理后台/企微确认…"
 
     const val DEVICE_LABEL = "学生平板"
 
@@ -87,14 +87,20 @@ class PairingClient(
         }
         if (deviceId.isBlank()) return PairingOutcome.Failed(PairingText.REJECTED)
         val pending = PairingOutcome.Pending(deviceId, url, childId, certFingerprint?.takeIf { it.isNotBlank() })
-        return when (val status = poll(pending)) {
+        return when (val status = poll(pending, waitSeconds = 0)) {
             is PairingOutcome.Failed -> pending
             else -> status
         }
     }
 
-    fun poll(pending: PairingOutcome.Pending): PairingOutcome {
-        val path = "$STATUS_PATH?wait=0"
+    /**
+     * `wait` is the server long-poll in seconds (capped at 25). `0` returns
+     * the current status immediately. A network failure keeps the caller on
+     * the same pending record; revoked and 401/403 do not.
+     */
+    fun poll(pending: PairingOutcome.Pending, waitSeconds: Int = 0): PairingOutcome {
+        val wait = waitSeconds.coerceIn(0, 25)
+        val path = "$STATUS_PATH?wait=$wait"
         val headers = DeviceSigner.signHeaders(
             deviceId = pending.deviceId,
             method = "GET",

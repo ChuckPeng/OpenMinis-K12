@@ -63,7 +63,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/k12-e2e"
           go build -trimpath -o "$RUNNER_TEMP/k12-e2e/openminis-k12-server" ./cmd/openminis-k12-server
 
-      - name: Emulator pairing test
+      - name: Emulator learning journey
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: ${{ matrix.api-level }}

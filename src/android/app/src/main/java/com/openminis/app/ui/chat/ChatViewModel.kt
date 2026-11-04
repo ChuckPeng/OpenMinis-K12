@@ -2520,6 +2520,7 @@ class ChatViewModel(
             // would reject.
             rosterNames = providerRepository.subAgents.map { it.name },
             userAskExposed = userAskExposedThisRun,
+            k12CalcEnabled = com.openminis.k12.android.K12Runtime.installed,
         )
 
     /**
@@ -9435,6 +9436,10 @@ class ChatViewModel(
         // [T-android-stop-sibling-subagent] New work in this session lifts the
         // stop: delegations from here on may drive the turn again.
         com.openminis.app.agent.jobs.AgentJobRegistry.clearDelegationMute(activeSessionId)
+        if (com.openminis.k12.android.K12Runtime.installed && com.openminis.k12.android.K12Runtime.enforcing()) {
+            if (com.openminis.k12.android.K12SafetyRuntime.consider(text)) return
+            com.openminis.k12.tutoring.TutoringRuntime.noteQuestion(text)
+        }
         sendMessage(text, skipContextCheck = false, headless = false)
     }
 
@@ -14217,6 +14222,8 @@ class ChatViewModel(
                     )
                 }
             "memory_get" -> executeMemoryGetTool(argsJson)
+            com.openminis.k12.tutoring.K12CalcTool.NAME ->
+                com.openminis.k12.tutoring.K12CalcTool.execute(argsJson)
             // [T-port-user-ask] Card in the chat, then wait for the user.
             // [T-user-ask-exposure-guard] A run that does not offer the tool (the
             // setting is off, a helper / sub agent, a scheduled or other headless

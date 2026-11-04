@@ -125,19 +125,36 @@ class K12SyncScheduleAcceptanceTest {
         val gate = SyncGate()
         val started = CountDownLatch(1)
         val release = CountDownLatch(1)
+        val runs = java.util.concurrent.atomic.AtomicInteger(0)
+        val joinedInside = CountDownLatch(1)
+        gate.onJoined = { joinedInside.countDown() }
+        val workerResult = arrayOfNulls<SyncRunResult>(1)
         val worker = Thread {
-            gate.run {
+            workerResult[0] = gate.run {
+                runs.incrementAndGet()
                 started.countDown()
                 assertTrue(release.await(5, TimeUnit.SECONDS))
                 SyncRunResult.Ok
             }
         }
+        val joinedResult = arrayOfNulls<SyncRunResult>(1)
+        val joined = Thread {
+            joinedResult[0] = gate.run {
+                runs.incrementAndGet()
+                SyncRunResult.Stop(9)
+            }
+        }
         worker.start()
         assertTrue(started.await(5, TimeUnit.SECONDS))
-        val skipped = gate.run { SyncRunResult.Ok }
+        joined.start()
+        assertTrue(joinedInside.await(5, TimeUnit.SECONDS))
         release.countDown()
         worker.join(5_000)
-        assertTrue(skipped is SyncRunResult.Skipped)
+        joined.join(5_000)
+        gate.onJoined = null
+        assertTrue(workerResult[0] is SyncRunResult.Ok)
+        assertTrue("a sync that joined the in-flight run must observe its result", joinedResult[0] is SyncRunResult.Ok)
+        assertEquals(2, runs.get())
     }
 
     @Test

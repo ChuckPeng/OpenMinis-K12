@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ChuckPeng/OpenMinis-K12/server/internal/deviceapi"
 	"github.com/ChuckPeng/OpenMinis-K12/server/internal/store"
 )
 
@@ -202,6 +203,24 @@ func TestTabletModelAuthCSRFHeartbeatAndRevoked(t *testing.T) {
 	_ = json.Unmarshal(hb.Body.Bytes(), &hbBody)
 	if versionNum(hbBody["tablet_model_version"]) != 1 {
 		t.Fatalf("heartbeat version: %+v", hbBody)
+	}
+
+	hbUsed := h.signedDeviceRequest(t, http.MethodPost, "/api/v1/device/heartbeat", []byte(`{"app_version":"1.0.0-rc.6","config_version_applied":0,"daily_used_minutes":11}`), devID, devPriv, nil)
+	if hbUsed.Code != http.StatusOK {
+		t.Fatalf("usage heartbeat: %d %s", hbUsed.Code, hbUsed.Body.String())
+	}
+	usage, err := h.Store.GetUsage(context.Background(), "child-model-a", deviceapi.LocalDateInShanghai(time.Now().UnixMilli()))
+	if err != nil || usage == nil || usage.CompanionMinutes < 11 {
+		t.Fatalf("companion minutes from daily_used_minutes: %+v err=%v", usage, err)
+	}
+	// A second report of the same cumulative total must not add another 11.
+	again := h.signedDeviceRequest(t, http.MethodPost, "/api/v1/device/heartbeat", []byte(`{"app_version":"1.0.0-rc.6","config_version_applied":0,"daily_used_minutes":11}`), devID, devPriv, nil)
+	if again.Code != http.StatusOK {
+		t.Fatalf("usage heartbeat again: %d", again.Code)
+	}
+	usage, err = h.Store.GetUsage(context.Background(), "child-model-a", deviceapi.LocalDateInShanghai(time.Now().UnixMilli()))
+	if err != nil || usage == nil || usage.CompanionMinutes != 11 {
+		t.Fatalf("cumulative usage doubled: %+v err=%v", usage, err)
 	}
 
 	// Unknown device.

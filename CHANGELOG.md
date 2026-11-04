@@ -8,6 +8,37 @@ as defined in `docs/k12/conventions.md` (K12 SemVer is independent of upstream M
 
 ## [Unreleased]
 
+## [1.0.0-rc.6] - 2026-11-04
+
+A tablet on `1.0.0-rc.5` could be approved in the admin UI and still sit on 绑定家长服务器 with last heartbeat 未上线. The pending device id lived only in a Compose `remember`, so a navigation or process restart dropped it and `markPaired` never ran. Upstream Android baseline remains **1.15** (`versionCode` 37). Product SemVer `1.0.0-rc.6` / `versionCode` `1000012`. GA `1.0.0` moves to `versionCode` `1000013`.
+
+### Fixed
+
+- Pending pairing (device id, base URL, child id, certificate fingerprint) is stored as soon as `POST /pair` succeeds, and `profile.pairing` becomes `pending`. Status is polled on process start, on every foreground, about every 10 seconds while the waiting screen is up (`wait` up to 10, server cap 25), and by a 15-minute WorkManager job. `active` saves the endpoint, clears the pending record, syncs immediately, and leaves the waiting screen. `revoked` or HTTP 401/403 clears it and shows the denial. A network failure keeps the pending record.
+- The waiting screen shows the host, a refresh button, and cancel. It reads pairing state from `K12Runtime` instead of a one-shot endpoint read.
+- Re-pairing with the same device public key reuses the existing row. A different key on an already active child returns 409. A revoked row with the same key returns to `pending_confirm`.
+- Heartbeats send cumulative foreground minutes as `daily_used_minutes`. The server stores only the increase, so a repeated report of the same total does not double the day's usage. The admin device list includes `companion_minutes`.
+- A parent-configured hotline from the heartbeat is what the second emergency screen shows.
+- The parent screen recomposes when a wrong attempt is recorded, so 待复习 and the knowledge-point line appear without leaving the page.
+- A sync requested while one is already running waits for that cycle and returns its result. The empty session list shows the New Chat button once the server model is ready, which is the button named by 还没有对话。点下面的按钮开始。 Saving the paired endpoint uses `commit()`, so a process death cannot drop it.
+- The chat composer exposes resource id `k12_chat_composer`. A New Chat tap with no visible model entry is logged and does not navigate.
+- A parent-delivered model stays available for a new chat. Persisting the provider config rewrites the entry id, and the following cleanup was deleting that entry.
+- Confirming the parent PIN opens the parent page. The gate used to pop back to the session list first, that hop locked the parent session, and the parent page was then refused.
+- A pair-status poll that is still in flight when the parent confirms cannot write `pending` back over `active`.
+- The emergency screen fills the activity window. The parent hotline phrase and number are each their own line, so the second step can show them after the child declines.
+- `k12_calc` waits for Symja's first load instead of returning `busy` while warmup still holds the engine. A chat that starts a tutoring session and immediately calls the tool now shows the number.
+- With animator duration scale 0, the chat list/detail panes use no slide, and the attach menu skips its scale/fade, so both are on screen as soon as they open.
+
+### Added
+
+- Chat can call on-device Symja through the `k12_calc` tool when K12 is installed. A tutoring session starts from the child's message. A wrong attempt is written to the local mistake book.
+- Crisis text opens 请马上告诉身边的大人 and queues an alert for the next sync. The message is not sent to the model.
+- Emulator e2e (API 30 and 34) runs the pairing restart and a full learning journey against an in-job fake OpenAI server. The feature list is `docs/k12/testing/e2e-matrix.md`. Headless runs do not open a camera; the photo step uses a fixture image. WeCom button callbacks stay on the owner live test.
+
+### Changed
+
+- Product SemVer → `1.0.0-rc.6` / `versionCode` `1000012`.
+
 ## [1.0.0-rc.5] - 2026-11-04
 
 Phone testing of `1.0.0-rc.4` still stopped at pairing with “无法生成这台平板的签名密钥。请再试一次。如果仍然失败，请先解除绑定后再绑定。” `DeviceSigningKey.open()` returned null. JVM tests never called AndroidKeyStore. Upstream Android baseline remains **1.15** (`versionCode` 37). Product SemVer `1.0.0-rc.5` / `versionCode` `1000011`. GA `1.0.0` moves to `versionCode` `1000012`.
@@ -229,7 +260,8 @@ Milestone **M0 · Thin shell**. Upstream Android baseline: **1.15** (`versionCod
 
 - Release keystore material stays out of git; CI fails if a keystore is committed.
 
-[Unreleased]: https://github.com/ChuckPeng/OpenMinis-K12/compare/v1.0.0-rc.5...HEAD
+[Unreleased]: https://github.com/ChuckPeng/OpenMinis-K12/compare/v1.0.0-rc.6...HEAD
+[1.0.0-rc.6]: https://github.com/ChuckPeng/OpenMinis-K12/compare/v1.0.0-rc.5...v1.0.0-rc.6
 [1.0.0-rc.5]: https://github.com/ChuckPeng/OpenMinis-K12/compare/v1.0.0-rc.4...v1.0.0-rc.5
 [1.0.0-rc.4]: https://github.com/ChuckPeng/OpenMinis-K12/compare/v1.0.0-rc.3...v1.0.0-rc.4
 [1.0.0-rc.3]: https://github.com/ChuckPeng/OpenMinis-K12/compare/v1.0.0-rc.2...v1.0.0-rc.3

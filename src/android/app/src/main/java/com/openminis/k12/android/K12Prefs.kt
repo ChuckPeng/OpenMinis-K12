@@ -72,7 +72,7 @@ class K12Prefs(context: Context) {
             .putLong(KEY_CONTINUOUS, l.continuousMs)
             .putString(KEY_ANCHOR, l.anchorMs?.toString())
             .putString(KEY_BG, l.backgroundSinceMs?.toString())
-            .apply()
+            .commit()
     }
 
     private companion object {

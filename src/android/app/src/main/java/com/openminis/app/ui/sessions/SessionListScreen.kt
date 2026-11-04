@@ -1559,9 +1559,14 @@ fun SessionListScreen(
                     onDelete = { showBulkDeleteDialog = true },
                     modifier = Modifier.align(Alignment.BottomCenter),
                 )
-            } else if (hasProviders && (sessions.isNotEmpty() || isSearchActive)) {
+            } else if (
+                hasProviders && (sessions.isNotEmpty() || isSearchActive) ||
+                (com.openminis.k12.android.K12Runtime.installed && com.openminis.k12.android.K12Runtime.chatReady())
+            ) {
                 // Dual FAB row (matching iOS: New Chat left + Search right, or vice versa).
                 // Hidden while the onboarding landing is showing — Step 3 provides the CTA.
+                // The K12 empty line says to use the button below, including when
+                // there are still no sessions.
                 // T46: stay visible while search is active even when the result
                 // set is empty, so the user can edit / clear the query without
                 // having to rediscover the search FAB after a 0-hit query.
@@ -1574,7 +1579,14 @@ fun SessionListScreen(
                     onNewChat = {
                         scope.launch {
                             val sessionId = viewModel.createNewSession()
-                            if (sessionId != null) onNewChatGuarded(sessionId)
+                            if (sessionId != null) {
+                                onNewChatGuarded(sessionId)
+                            } else {
+                                android.util.Log.w(
+                                    "K12Chat",
+                                    "New Chat ignored: no visible model entry",
+                                )
+                            }
                         }
                     },
                     onNewChatWithGroup = { groupId ->

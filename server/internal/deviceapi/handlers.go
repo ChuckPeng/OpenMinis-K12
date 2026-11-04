@@ -77,9 +77,18 @@ func (s *Server) pairDevice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if child_id already has an active device
-	existing, err := s.Store.GetDeviceByChildID(ctx, req.ChildID)
-	if err == nil && existing != nil && existing.Status == "active" {
+	byChild, err := s.Store.GetDeviceByChildID(ctx, req.ChildID)
+	if err != nil {
+		httpx.WriteError(w, http.StatusInternalServerError, "internal_error", "failed to look up device")
+		return
+	}
+	byKey, err := s.Store.GetDeviceByPubkey(ctx, req.DevicePubkey)
+	if err != nil {
+		httpx.WriteError(w, http.StatusInternalServerError, "internal_error", "failed to look up device")
+		return
+	}
+	// Another tablet already owns this child. The same signing key may pair again.
+	if byChild != nil && byChild.Status == "active" && byChild.Pubkey != req.DevicePubkey {
 		httpx.WriteError(w, http.StatusConflict, "device_conflict", "child already has an active device; replace confirmation required")
 		return
 	}
@@ -114,30 +123,68 @@ func (s *Server) pairDevice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Register device in pending_confirm state
-	devID := uuid.NewString()
 	label := req.Label
 	if label == "" {
 		label = "学生平板"
 	}
-	dev := &store.Device{
-		ID:            devID,
-		FamilyID:      familyID,
-		ChildID:       req.ChildID,
-		Label:         label,
-		Pubkey:        req.DevicePubkey,
-		CodeSecretEnc: codeSecretEnc,
-		Status:        "pending_confirm",
+	// Same signing key reuses its row so a tablet that lost its pending record
+	// can pair again without a duplicate. A non-active row for this child is
+	// replaced in place. An active row with this key stays active.
+	var target *store.Device
+	status := "pending_confirm"
+	switch {
+	case byKey != nil && byKey.Status == "active" && (byChild == nil || byChild.ID == byKey.ID):
+		target = byKey
+		status = "active"
+	case byKey != nil && byKey.Status == "pending_confirm" && (byChild == nil || byChild.ID == byKey.ID || byChild.Status != "active"):
+		target = byKey
+	case byKey != nil && byKey.Status == "revoked" && (byChild == nil || byChild.ID == byKey.ID || byChild.Status != "active"):
+		target = byKey
+	case byChild != nil && byChild.Status != "active":
+		target = byChild
 	}
-	if err := s.Store.CreateDevice(ctx, dev); err != nil {
-		httpx.WriteError(w, http.StatusInternalServerError, "internal_error", "failed to create device")
-		return
+	if target != nil && byChild != nil && byChild.ID != target.ID && byChild.Status != "active" {
+		if err := s.Store.DeleteInactiveDevice(ctx, byChild.ID); err != nil {
+			httpx.WriteError(w, http.StatusInternalServerError, "internal_error", "failed to replace device")
+			return
+		}
+	}
+
+	var dev *store.Device
+	if target != nil {
+		if err := s.Store.UpdateDevicePairing(ctx, target.ID, req.ChildID, label, req.DevicePubkey, codeSecretEnc, status); err != nil {
+			httpx.WriteError(w, http.StatusInternalServerError, "internal_error", "failed to update device")
+			return
+		}
+		dev, err = s.Store.GetDevice(ctx, target.ID)
+		if err != nil || dev == nil {
+			httpx.WriteError(w, http.StatusInternalServerError, "internal_error", "failed to update device")
+			return
+		}
+	} else {
+		dev = &store.Device{
+			ID:            uuid.NewString(),
+			FamilyID:      familyID,
+			ChildID:       req.ChildID,
+			Label:         label,
+			Pubkey:        req.DevicePubkey,
+			CodeSecretEnc: codeSecretEnc,
+			Status:        "pending_confirm",
+		}
+		if err := s.Store.CreateDevice(ctx, dev); err != nil {
+			httpx.WriteError(w, http.StatusInternalServerError, "internal_error", "failed to create device")
+			return
+		}
+		_, _ = s.Store.SetDeviceConfig(ctx, dev.ID, defaultDeviceConfigJSON, "system")
 	}
 
 	// Ensure child record exists and bind device
 	_, _ = s.Store.EnsureChild(ctx, req.ChildID, familyID, label, "小学低年级")
-	_ = s.Store.BindChildDevice(ctx, req.ChildID, devID)
-	_, _ = s.Store.SetDeviceConfig(ctx, devID, defaultDeviceConfigJSON, "system")
+	_ = s.Store.BindChildDevice(ctx, req.ChildID, dev.ID)
+	if _, cfg, cfgErr := s.Store.GetDeviceConfig(ctx, dev.ID); cfgErr != nil || cfg == "" {
+		_, _ = s.Store.SetDeviceConfig(ctx, dev.ID, defaultDeviceConfigJSON, "system")
+	}
+	devID := dev.ID
 
 	// Send WeCom confirmation card to parents (outbox)
 	_ = outbox.EnqueueJSON(ctx, s.Store, "", "device_pairing", map[string]any{
@@ -150,7 +197,7 @@ func (s *Server) pairDevice(w http.ResponseWriter, r *http.Request) {
 
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{
 		"device_id":           devID,
-		"status":              "pending_confirm",
+		"status":              dev.Status,
 		"code_secret_alg":     alg,
 		"code_secret_wrapped": wrapped,
 	})
@@ -684,7 +731,9 @@ func (s *Server) heartbeat(w http.ResponseWriter, r *http.Request) {
 		Turns                int    `json:"turns"`
 		Images               int    `json:"images"`
 		CompanionMinutes     int    `json:"companion_minutes"`
-		PermissionCheck      struct {
+		// The tablet sends the cumulative foreground minutes under this name.
+		DailyUsedMinutes int `json:"daily_used_minutes"`
+		PermissionCheck  struct {
 			NotificationsEnabled bool `json:"notifications_enabled"`
 			BatteryUnrestricted  bool `json:"battery_unrestricted"`
 			BackgroundAllowed    bool `json:"background_allowed"`
@@ -699,9 +748,23 @@ func (s *Server) heartbeat(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	_ = s.Store.UpdateDeviceHeartbeat(ctx, dev.ID, req.AppVersion, req.ConfigVersionApplied)
 
-	// Record daily usage
+	// Record daily usage. daily_used_minutes is the tablet's cumulative
+	// foreground total for the day, so only the increase is stored.
+	// companion_minutes remains a delta for older callers.
 	today := LocalDateInShanghai(time.Now().UnixMilli())
-	_ = s.Store.RecordUsage(ctx, dev.ChildID, today, req.Turns, req.Images, req.CompanionMinutes)
+	minutes := req.CompanionMinutes
+	if req.DailyUsedMinutes > 0 {
+		current, _ := s.Store.GetUsage(ctx, dev.ChildID, today)
+		have := 0
+		if current != nil {
+			have = current.CompanionMinutes
+		}
+		minutes = req.DailyUsedMinutes - have
+		if minutes < 0 {
+			minutes = 0
+		}
+	}
+	_ = s.Store.RecordUsage(ctx, dev.ChildID, today, req.Turns, req.Images, minutes)
 
 	serverTime := time.Now().UTC().Format(time.RFC3339Nano)
 	resp := map[string]any{

@@ -20,6 +20,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 import java.io.File
 
@@ -250,13 +251,33 @@ class K12CasA4AcceptanceTest {
     fun sessionStartWarmsCasOffTheCaller() {
         TutoringRuntime.reset()
         TutoringRuntime.dispatch(TutoringAction.Start(questionHash = "qh-warm", stemCharCount = 4))
-        assertEquals(CalcResult.Ok("4"), cas.evaluate("2*2"))
+        val result = cas.evaluate("2*2")
+        if (result is CalcResult.Err) fail("warmup must not answer ${result.message}")
+        assertEquals(CalcResult.Ok("4"), result)
+    }
+
+    @Test
+    fun checkWaitsWhileWarmupHoldsTheEngine() {
+        assertEquals(CalcResult.Ok("2"), cas.evaluate("1+1"))
+        SymjaCalcEngine.prepareColdWaitForTests()
+        SymjaCalcEngine.stallForTestsMs = 3_000
+        val holder = Thread { SymjaCalcEngine.warmUp() }
+        holder.start()
+        val seen = System.currentTimeMillis() + 5_000
+        while (!SymjaCalcEngine.enteredForTests && System.currentTimeMillis() < seen) {
+            Thread.sleep(20)
+        }
+        val result = cas.evaluate("2+2")
+        holder.join(20_000)
+        SymjaCalcEngine.stallForTestsMs = 0
+        if (result is CalcResult.Err) fail("a check behind warmup returned ${result.message}")
+        assertEquals(CalcResult.Ok("4"), result)
     }
 
     @Test
     fun releaseMetadataMarksBlockerResolved() {
-        assertEquals("1.0.0-rc.5", Version.NAME)
-        assertEquals(1_000_011, Version.CODE)
+        assertEquals("1.0.0-rc.6", Version.NAME)
+        assertEquals(1_000_012, Version.CODE)
         assertTrue(Version.matchesCodeFormula())
         val changelog = repoFile("CHANGELOG.md").readText()
         assertTrue(changelog.contains("## [1.0.0-rc.1]"))
@@ -264,6 +285,7 @@ class K12CasA4AcceptanceTest {
         assertTrue(changelog.contains("## [1.0.0-rc.3]"))
         assertTrue(changelog.contains("## [1.0.0-rc.4]"))
         assertTrue(changelog.contains("## [1.0.0-rc.5]"))
+        assertTrue(changelog.contains("## [1.0.0-rc.6]"))
         assertTrue(changelog.contains("BLOCK-CAS-1"))
         val roadmap = repoFile("docs/k12/roadmap.md").readText()
         assertTrue(roadmap.contains("BLOCK-CAS-1"))

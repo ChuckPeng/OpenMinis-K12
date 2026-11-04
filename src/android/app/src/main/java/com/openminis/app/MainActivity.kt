@@ -626,6 +626,9 @@ class MainActivity : ComponentActivity() {
                 // [FEAT-261021-05] A proxy or Tailscale that keeps failing:
                 // a floating banner over every screen (iOS ContentView).
                 com.openminis.app.ui.settings.NetworkAlertBannerHost(navController)
+
+                // Last, so the emergency screen covers chat and the banners.
+                com.openminis.k12.ui.K12EmergencyHost()
             }
         }
     }

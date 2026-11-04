@@ -15,6 +15,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,6 +34,7 @@ import com.openminis.k12.device.DevicePairing
 import com.openminis.k12.device.PairingOutcome
 import com.openminis.k12.device.PairingText
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -42,26 +44,41 @@ fun K12PairingSection(onPaired: () -> Unit = {}, onSkip: (() -> Unit)? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val snap = K12Runtime.ui.value
-    val endpoint = K12PairingRuntime.currentEndpoint()
+    val endpoint = K12PairingRuntime.endpoint.value
+    val pending = K12PairingRuntime.pending.value
+    val notice = K12PairingRuntime.notice.value
     var url by remember { mutableStateOf("") }
     var code by remember { mutableStateOf("") }
     var paste by remember { mutableStateOf("") }
     var fingerprint by remember { mutableStateOf<String?>(null) }
-    var pending by remember { mutableStateOf<PairingOutcome.Pending?>(null) }
-    var message by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     var cameraFile by remember { mutableStateOf<File?>(null) }
+
+    LaunchedEffect(snap.profile.pairing) {
+        if (snap.profile.pairing == "active") onPaired()
+    }
+    LaunchedEffect(snap.profile.pairing) {
+        if (snap.profile.pairing != "pending") return@LaunchedEffect
+        while (isActive && K12Runtime.snapshot().profile.pairing == "pending") {
+            val outcome = withContext(Dispatchers.IO) {
+                K12PairingRuntime.pollNow(context, waitSeconds = 10)
+            }
+            if (outcome is PairingOutcome.Failed && K12Runtime.snapshot().profile.pairing == "pending") {
+                kotlinx.coroutines.delay(2_000)
+            }
+        }
+    }
 
     fun applyQr(text: String?) {
         val parsed = text?.let { DevicePairing.parseQr(it) }
         if (parsed == null) {
-            message = PairingText.QR_MISS
+            K12PairingRuntime.notice.value = PairingText.QR_MISS
             return
         }
         url = parsed.baseUrl
         code = parsed.pairCode
         fingerprint = parsed.certFingerprint.ifBlank { null }
-        message = null
+        K12PairingRuntime.notice.value = null
     }
 
     val takePicture = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
@@ -84,7 +101,7 @@ fun K12PairingSection(onPaired: () -> Unit = {}, onSkip: (() -> Unit)? = null) {
         takePicture.launch(uri)
     }
     val cameraPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) launchCamera() else message = context.getString(R.string.k12_pair_camera)
+        if (granted) launchCamera() else K12PairingRuntime.notice.value = context.getString(R.string.k12_pair_camera)
     }
     val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         if (uri == null) return@rememberLauncherForActivityResult
@@ -111,6 +128,32 @@ fun K12PairingSection(onPaired: () -> Unit = {}, onSkip: (() -> Unit)? = null) {
                 Text(stringResource(R.string.k12_onboarding_finish))
             }
         }
+        return
+    }
+    if (snap.profile.pairing == "pending" && pending != null) {
+        Text(stringResource(R.string.k12_pair_waiting), style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.k12_pair_host, PairingText.hostOf(pending.baseUrl)))
+        if (notice != null) Text(notice)
+        if (busy) Text(stringResource(R.string.k12_pair_working))
+        Button(
+            onClick = {
+                busy = true
+                scope.launch {
+                    val outcome = withContext(Dispatchers.IO) {
+                        K12PairingRuntime.refresh(context, pending)
+                    }
+                    busy = false
+                    if (outcome is PairingOutcome.Active) onPaired()
+                }
+            },
+            enabled = !busy,
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text(stringResource(R.string.k12_pair_refresh)) }
+        OutlinedButton(
+            onClick = { K12PairingRuntime.cancel(context) },
+            enabled = !busy,
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text(stringResource(R.string.k12_pair_cancel)) }
         return
     }
 
@@ -151,52 +194,24 @@ fun K12PairingSection(onPaired: () -> Unit = {}, onSkip: (() -> Unit)? = null) {
             modifier = Modifier.weight(1f),
         ) { Text(stringResource(R.string.k12_pair_image)) }
     }
-    if (message != null) Text(message!!)
+    if (notice != null) Text(notice)
     if (busy) Text(stringResource(R.string.k12_pair_working))
     Button(
         onClick = {
             val childId = snap.profile.childId.orEmpty()
             busy = true
-            message = null
+            K12PairingRuntime.notice.value = null
             scope.launch {
                 val outcome = withContext(Dispatchers.IO) {
                     K12PairingRuntime.submit(context, url, code, childId, fingerprint)
                 }
                 busy = false
-                when (outcome) {
-                    is PairingOutcome.Active -> onPaired()
-                    is PairingOutcome.Pending -> {
-                        pending = outcome
-                        message = PairingText.PENDING
-                    }
-                    is PairingOutcome.Failed -> message = outcome.message
-                }
+                if (outcome is PairingOutcome.Active) onPaired()
             }
         },
         enabled = !busy,
         modifier = Modifier.fillMaxWidth(),
     ) { Text(stringResource(R.string.k12_pair_submit)) }
-    if (pending != null) {
-        OutlinedButton(
-            onClick = {
-                val current = pending ?: return@OutlinedButton
-                busy = true
-                scope.launch {
-                    val outcome = withContext(Dispatchers.IO) {
-                        K12PairingRuntime.refresh(context, current)
-                    }
-                    busy = false
-                    when (outcome) {
-                        is PairingOutcome.Active -> onPaired()
-                        is PairingOutcome.Pending -> message = PairingText.PENDING
-                        is PairingOutcome.Failed -> message = outcome.message
-                    }
-                }
-            },
-            enabled = !busy,
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text(stringResource(R.string.k12_pair_refresh)) }
-    }
     if (onSkip != null) {
         OutlinedButton(onClick = onSkip, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
             Text(stringResource(R.string.k12_onboarding_skip))

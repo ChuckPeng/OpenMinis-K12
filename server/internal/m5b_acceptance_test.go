@@ -188,11 +188,11 @@ func gzipBytes(data []byte) []byte {
 
 func TestM5bVersionAndCode(t *testing.T) {
 	// M5b shipped 1.0.0-m5b / 1000006. The embedded defaults track the current pre-release.
-	if version.Version != "1.0.0-rc.5" {
-		t.Fatalf("expected version 1.0.0-rc.5, got %s", version.Version)
+	if version.Version != "1.0.0-rc.6" {
+		t.Fatalf("expected version 1.0.0-rc.6, got %s", version.Version)
 	}
-	if version.VersionCode != "1000011" {
-		t.Fatalf("expected versionCode 1000011, got %s", version.VersionCode)
+	if version.VersionCode != "1000012" {
+		t.Fatalf("expected versionCode 1000012, got %s", version.VersionCode)
 	}
 }
 

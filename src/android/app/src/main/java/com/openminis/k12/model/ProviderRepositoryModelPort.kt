@@ -1,5 +1,6 @@
 package com.openminis.k12.model
 
+import com.openminis.app.data.db.compositeEntryKey
 import com.openminis.app.data.model.LLMModel
 import com.openminis.app.data.model.ModelEntry
 import com.openminis.app.data.model.ModelGroup
@@ -67,27 +68,26 @@ class ProviderRepositoryModelPort(
 
         val separateVision = spec.visionModelName.isNotBlank() && spec.visionModelName != spec.modelName
         val chatInputs = if (separateVision) listOf("text") else listOf("text", "image")
+        val keepModels = buildSet {
+            add(spec.modelName)
+            if (separateVision) add(spec.visionModelName)
+        }
         upsertEntry(ManagedModelIds.CHAT_ENTRY, spec.modelName, chatInputs)
         if (separateVision) {
             upsertEntry(ManagedModelIds.VISION_ENTRY, spec.visionModelName, listOf("text", "image"))
-        } else {
-            removeEntryIfPresent(ManagedModelIds.VISION_ENTRY)
         }
-        val extras = repo.config.value.modelEntries
-            .filter {
-                it.providerInstanceId == ManagedModelIds.INSTANCE &&
-                    it.id != ManagedModelIds.CHAT_ENTRY &&
-                    it.id != ManagedModelIds.VISION_ENTRY
-            }
-            .map { it.id }
-        extras.forEach { repo.removeEntry(it) }
+        // saveConfig rewrites each entry id to "{instance}/{model}". Comparing
+        // against the pre-save uuid deletes the entry that was just written.
+        staleManagedEntryIds(repo.config.value.modelEntries, ManagedModelIds.INSTANCE, keepModels)
+            .forEach { repo.removeEntry(it) }
 
+        val chatId = liveEntryId(spec.modelName)
         val visionMembers = if (separateVision) {
-            mutableListOf(ManagedModelIds.VISION_ENTRY)
+            mutableListOf(liveEntryId(spec.visionModelName))
         } else {
-            mutableListOf(ManagedModelIds.CHAT_ENTRY)
+            mutableListOf(chatId)
         }
-        upsertGroup(ManagedModelIds.CHAT_GROUP, "讲题", mutableListOf(ManagedModelIds.CHAT_ENTRY))
+        upsertGroup(ManagedModelIds.CHAT_GROUP, "讲题", mutableListOf(chatId))
         upsertGroup(ManagedModelIds.VISION_GROUP, "拍题", visionMembers)
         repo.defaultPrimaryGroupId = ManagedModelIds.CHAT_GROUP
         repo.visionGroupId = ManagedModelIds.VISION_GROUP
@@ -122,7 +122,12 @@ class ProviderRepositoryModelPort(
         repo.deleteApiKey(ManagedModelIds.INSTANCE)
     }
 
-    private fun upsertEntry(id: String, modelId: String, inputs: List<String>) {
+    private fun upsertEntry(legacyId: String, modelId: String, inputs: List<String>) {
+        val composite = compositeEntryKey(ManagedModelIds.INSTANCE, modelId)
+        val existing = repo.config.value.modelEntries.firstOrNull {
+            it.providerInstanceId == ManagedModelIds.INSTANCE &&
+                (it.id == legacyId || it.id == composite || it.baseModel.id == modelId)
+        }
         val entry = ModelEntry(
             providerInstanceId = ManagedModelIds.INSTANCE,
             baseModel = LLMModel(
@@ -133,10 +138,17 @@ class ProviderRepositoryModelPort(
                 outputModalities = listOf("text"),
             ),
             isCustom = true,
-            uuid = id,
+            uuid = existing?.id ?: composite,
         )
-        val exists = repo.config.value.modelEntries.any { it.id == id }
-        if (exists) repo.updateEntry(entry) else repo.addEntry(entry)
+        if (existing != null) repo.updateEntry(entry) else repo.addEntry(entry)
+    }
+
+    private fun liveEntryId(modelId: String): String {
+        val composite = compositeEntryKey(ManagedModelIds.INSTANCE, modelId)
+        return repo.config.value.modelEntries.firstOrNull {
+            it.providerInstanceId == ManagedModelIds.INSTANCE &&
+                (it.id == composite || it.baseModel.id == modelId)
+        }?.id ?: composite
     }
 
     private fun upsertGroup(id: String, name: String, members: MutableList<String>) {
@@ -145,9 +157,17 @@ class ProviderRepositoryModelPort(
         if (exists) repo.updateGroup(group) else repo.addGroup(group)
     }
 
-    private fun removeEntryIfPresent(id: String) {
-        if (repo.config.value.modelEntries.any { it.id == id }) {
-            repo.removeEntry(id)
-        }
-    }
 }
+
+/**
+ * Entry ids that belong to the managed instance but are not one of the models
+ * in the delivered config. Matched on the model id, because persistence
+ * replaces the uuid this port first assigned.
+ */
+internal fun staleManagedEntryIds(
+    entries: List<ModelEntry>,
+    instanceId: String,
+    keepModelIds: Set<String>,
+): List<String> = entries
+    .filter { it.providerInstanceId == instanceId && it.baseModel.id !in keepModelIds }
+    .map { it.id }

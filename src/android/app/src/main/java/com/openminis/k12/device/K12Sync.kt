@@ -136,31 +136,55 @@ class CertificatePinException : Exception()
 /**
  * Overlapping runs collapse into the one already executing. The in-flight run
  * repeats once if another trigger arrived, and does not start a second client.
+ * A caller that arrives during that run waits and receives the same result.
+ * It does not get [SyncRunResult.Skipped] while the model fetch is still going.
  */
 class SyncGate {
     private val lock = Any()
     private var running = false
     private var again = false
+    private var published: SyncRunResult = SyncRunResult.Ok
+
+    /** Test hook: runs on a caller that attached to an in-flight cycle, before it waits. */
+    internal var onJoined: (() -> Unit)? = null
 
     fun run(block: () -> SyncRunResult): SyncRunResult {
-        synchronized(lock) {
+        val lead = synchronized(lock) {
             if (running) {
                 again = true
-                return SyncRunResult.Skipped
+                false
+            } else {
+                running = true
+                true
             }
-            running = true
         }
+        if (!lead) {
+            onJoined?.invoke()
+            return synchronized(lock) {
+                while (running) {
+                    (lock as java.lang.Object).wait()
+                }
+                published
+            }
+        }
+        return execute(block)
+    }
+
+    private fun execute(block: () -> SyncRunResult): SyncRunResult {
+        var last: SyncRunResult = SyncRunResult.Retry(-1)
         try {
-            var last: SyncRunResult = SyncRunResult.Ok
             while (true) {
                 synchronized(lock) { again = false }
                 last = block()
-                val repeat = synchronized(lock) { again }
+                val repeat = synchronized(lock) { again && last is SyncRunResult.Ok }
                 if (!repeat) return last
-                if (last !is SyncRunResult.Ok) return last
             }
         } finally {
-            synchronized(lock) { running = false }
+            synchronized(lock) {
+                published = last
+                running = false
+                (lock as java.lang.Object).notifyAll()
+            }
         }
     }
 }
