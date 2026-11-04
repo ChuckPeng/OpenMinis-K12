@@ -6,6 +6,7 @@ import android.content.ClipData
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.graphics.Rect
 import android.util.Log
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.core.content.FileProvider
@@ -194,7 +195,9 @@ class K12LearningE2ETest {
         }
         shot("12-permissions")
         device.pressBack()
-        waitText(PARENT, 10_000)
+        if (waitText(PARENT, 10_000) == null) {
+            die("parent screen did not return; on screen: ${visibleTexts()}")
+        }
         clickText(LOCK_LEAVE)
 
         openChatAgain()
@@ -517,19 +520,56 @@ class K12LearningE2ETest {
         val deadline = System.currentTimeMillis() + 8_000
         while (System.currentTimeMillis() < deadline) {
             val node = runCatching { device.findObject(By.text(text)) }.getOrNull()
-            val bounds = node?.let { runCatching { clickableOf(it).visibleBounds }.getOrNull() }
-            if (bounds != null && bounds.height() > 0 && bounds.width() > 0) {
-                device.click(bounds.centerX(), bounds.centerY())
+            val own = node?.let { runCatching { Rect(it.visibleBounds) }.getOrNull() }
+            if (node != null && own != null && fullyInside(own)) {
+                // The parent column is clickable. Its center is not this label.
+                // Use the label, or the smallest clickable node that contains it.
+                val bounds = smallestClickableBounds(node, own)
+                val x = bounds.centerX().coerceIn(1, device.displayWidth - 2)
+                val y = bounds.centerY().coerceIn(1, device.displayHeight - 2)
+                device.click(x, y)
                 device.waitForIdle(500)
                 return
             }
-            if (accessibilityClickText(text)) {
-                device.waitForIdle(500)
-                return
-            }
+            if (own != null) flick(revealLower = own.centerY() >= device.displayHeight / 2)
             device.waitForIdle(200)
         }
         die("not visible: $text; on screen: ${visibleTexts()}")
+    }
+
+    /** Fully inside the display, clear of the status bar and the bottom edge. */
+    private fun fullyInside(bounds: Rect): Boolean =
+        bounds.width() > 0 && bounds.height() > 0 &&
+            bounds.top >= 8 && bounds.bottom <= device.displayHeight - 8 &&
+            bounds.left >= 0 && bounds.right <= device.displayWidth
+
+    /**
+     * Smallest clickable, non-scrolling node whose bounds contain the label.
+     * A full-page scroller is many times the label; the label center is on the button.
+     */
+    private fun smallestClickableBounds(node: UiObject2, own: Rect): Rect {
+        var best: Rect? = null
+        var bestArea = Int.MAX_VALUE
+        var current: UiObject2? = node
+        var guard = 0
+        while (current != null && guard++ < 8) {
+            val here = current
+            val clickable = runCatching { here.isClickable }.getOrDefault(false)
+            val scrollable = runCatching { here.isScrollable }.getOrDefault(false)
+            val bounds = runCatching { Rect(here.visibleBounds) }.getOrNull()
+            if (clickable && !scrollable && bounds != null && bounds.contains(own.centerX(), own.centerY())) {
+                val area = bounds.width() * bounds.height()
+                if (area in 1 until bestArea) {
+                    best = bounds
+                    bestArea = area
+                }
+            }
+            current = runCatching { here.parent }.getOrNull()
+        }
+        val chosen = best ?: return Rect(own)
+        val ownArea = (own.width() * own.height()).coerceAtLeast(1)
+        if (chosen.width() * chosen.height() > ownArea * 6) return Rect(own)
+        return chosen
     }
 
     private fun clickDescAny(vararg descs: String) {
@@ -594,21 +634,6 @@ class K12LearningE2ETest {
         }
     }
 
-    /** Button labels are often a child of the clickable node. A gesture on the text misses. */
-    private fun accessibilityClickText(text: String): Boolean {
-        val root = InstrumentationRegistry.getInstrumentation().uiAutomation.rootInActiveWindow ?: return false
-        return try {
-            val found = ArrayList<AccessibilityNodeInfo>()
-            collectText(root, text, found)
-            val node = found.firstOrNull { it.isVisibleToUser } ?: return false
-            clickNode(node)
-        } catch (_: IllegalStateException) {
-            false
-        } finally {
-            root.recycle()
-        }
-    }
-
     private fun clickNode(node: AccessibilityNodeInfo): Boolean {
         var current: AccessibilityNodeInfo? = node
         var guard = 0
@@ -625,14 +650,6 @@ class K12LearningE2ETest {
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
             collectDesc(child, desc, out)
-        }
-    }
-
-    private fun collectText(node: AccessibilityNodeInfo, text: String, out: MutableList<AccessibilityNodeInfo>) {
-        if (node.text?.toString() == text) out.add(node)
-        for (i in 0 until node.childCount) {
-            val child = node.getChild(i) ?: continue
-            collectText(child, text, out)
         }
     }
 
@@ -756,7 +773,7 @@ class K12LearningE2ETest {
     private fun onScreen(text: String): Boolean {
         val node = runCatching { device.findObject(By.text(text)) }.getOrNull() ?: return false
         val bounds = runCatching { node.visibleBounds }.getOrNull() ?: return false
-        return bounds.height() > 0 && bounds.top >= 0 && bounds.bottom <= device.displayHeight
+        return fullyInside(bounds)
     }
 
     private fun flick(revealLower: Boolean) {
