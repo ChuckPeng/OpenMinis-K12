@@ -14,7 +14,7 @@ object PairingText {
     const val CONFLICT = "这个编号已经绑定了另一台平板。请在管理页确认更换。"
     const val REJECTED = "服务器拒绝了这次配对。"
     const val DENIED = "这次配对没有通过。"
-    const val NO_KEY = "无法生成这台平板的设备密钥。请重试。"
+    const val NO_KEY = "无法生成这台平板的签名密钥。请再试一次。如果仍然失败，请先解除绑定后再绑定。"
     const val NO_CHILD = "还没有这台平板的编号。请先完成第一次设置。"
     const val QR_MISS = "没有识别到配对二维码。"
     const val PENDING = "已提交，请家长在管理页确认后再点刷新。"

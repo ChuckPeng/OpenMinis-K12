@@ -23,9 +23,9 @@
 
 二维码内容：`public_base_url`、TLS 证书指纹、Ed25519 公钥、配对码。手输：同一地址 + 6 位一次性码。码 10 分钟、单次、错 5 次作废。手输时平板首次连接取得公钥与指纹，并显示指纹短码供与网页核对。
 
-`POST` 提交配对码、设备公钥、设备标签、`child_id`。返回 `device_id`、状态 `pending_confirm`，以及密封后的 `codeSecret`（Ed25519 用 X25519 sealed box，P-256 用 ECIES）。同一 `child_id` 已有 `active` 平板时，须在网页确认替换。`pending_confirm` 的密钥只能查询配对状态。
+`POST` 提交配对码、设备公钥（标准 Base64 的 32 字节 Ed25519）、设备标签、`child_id`。返回 `device_id`、状态 `pending_confirm`，以及用该公钥密封的 `codeSecret`（X25519 sealed box）。同一 `child_id` 已有 `active` 平板时，须在网页确认替换。`pending_confirm` 的密钥只能查询配对状态。
 
-设备密钥：Android Keystore 中的 Ed25519；旧系统不支持时用 ECDSA P-256。
+设备密钥：签名只用 Ed25519。API 33 及以上先试 Android Keystore 的硬件密钥（`EC` + `ed25519`），自测签名能通过才留下。否则在软件里生成 32 字节种子，用 Keystore 中不可导出的 AES-256-GCM 密钥加密后放在应用私有目录。rc.3 留下的 P-256 别名在下次配对前删掉并重新生成。解绑或重置会删掉两个 Keystore 项和密文。不记录密钥。
 
 ## 数据
 

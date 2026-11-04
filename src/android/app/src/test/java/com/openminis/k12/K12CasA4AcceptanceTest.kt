@@ -255,13 +255,14 @@ class K12CasA4AcceptanceTest {
 
     @Test
     fun releaseMetadataMarksBlockerResolved() {
-        assertEquals("1.0.0-rc.3", Version.NAME)
-        assertEquals(1_000_009, Version.CODE)
+        assertEquals("1.0.0-rc.4", Version.NAME)
+        assertEquals(1_000_010, Version.CODE)
         assertTrue(Version.matchesCodeFormula())
         val changelog = repoFile("CHANGELOG.md").readText()
         assertTrue(changelog.contains("## [1.0.0-rc.1]"))
         assertTrue(changelog.contains("## [1.0.0-rc.2]"))
         assertTrue(changelog.contains("## [1.0.0-rc.3]"))
+        assertTrue(changelog.contains("## [1.0.0-rc.4]"))
         assertTrue(changelog.contains("BLOCK-CAS-1"))
         val roadmap = repoFile("docs/k12/roadmap.md").readText()
         assertTrue(roadmap.contains("BLOCK-CAS-1"))

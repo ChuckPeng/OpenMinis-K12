@@ -8,6 +8,18 @@ as defined in `docs/k12/conventions.md` (K12 SemVer is independent of upstream M
 
 ## [Unreleased]
 
+## [1.0.0-rc.4] - 2026-11-04
+
+Phone testing of `1.0.0-rc.3` stopped at pairing: the tablet showed “无法生成这台平板的设备密钥” and never called the server. Upstream Android baseline remains **1.15** (`versionCode` 37). Product SemVer `1.0.0-rc.4` / `versionCode` `1000010`. GA `1.0.0` moves to `versionCode` `1000011`.
+
+### Fixed
+
+- Device signing is Ed25519 on every API this app supports (`minSdk` 26). AndroidKeyStore’s `Ed25519` generator is not available on most phones, and the rc.3 P-256 fallback cannot be sent: the server accepts only a raw 32-byte Ed25519 public key. API 33+ still tries a hardware key (`EC` + `ed25519`) and keeps it only when a self-test signature verifies. Otherwise the app generates the 32-byte seed in software (`net.i2p.crypto:eddsa` 0.3.0) and stores it as AES-256-GCM ciphertext under a non-exportable AndroidKeyStore AES key. An existing P-256 alias is deleted and replaced before pairing. Unpair or reset deletes the signing alias, the AES alias, and the ciphertext. Key bytes are not logged. If generation still fails, logcat records the exception class name and the parent form says to retry, then unpair and pair again.
+
+### Changed
+
+- Product SemVer → `1.0.0-rc.4` / `versionCode` `1000010`.
+
 ## [1.0.0-rc.3] - 2026-11-04
 
 Phone testing of `1.0.0-rc.2` found three blockers. This candidate fixes them and drops the dedicated child home page. Upstream Android baseline remains **1.15** (`versionCode` 37). Product SemVer `1.0.0-rc.3` / `versionCode` `1000009` (STAGE 9). That uses the last single-digit STAGE on the `1.0.0` line, so GA `1.0.0` will use `versionCode` `1000010`.
@@ -200,7 +212,8 @@ Milestone **M0 · Thin shell**. Upstream Android baseline: **1.15** (`versionCod
 
 - Release keystore material stays out of git; CI fails if a keystore is committed.
 
-[Unreleased]: https://github.com/ChuckPeng/OpenMinis-K12/compare/v1.0.0-rc.3...HEAD
+[Unreleased]: https://github.com/ChuckPeng/OpenMinis-K12/compare/v1.0.0-rc.4...HEAD
+[1.0.0-rc.4]: https://github.com/ChuckPeng/OpenMinis-K12/compare/v1.0.0-rc.3...v1.0.0-rc.4
 [1.0.0-rc.3]: https://github.com/ChuckPeng/OpenMinis-K12/compare/v1.0.0-rc.2...v1.0.0-rc.3
 [1.0.0-rc.2]: https://github.com/ChuckPeng/OpenMinis-K12/compare/v1.0.0-rc.1...v1.0.0-rc.2
 [1.0.0-rc.1]: https://github.com/ChuckPeng/OpenMinis-K12/compare/v1.0.0-m5b...v1.0.0-rc.1
