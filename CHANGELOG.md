@@ -8,6 +8,23 @@ as defined in `docs/k12/conventions.md` (K12 SemVer is independent of upstream M
 
 ## [Unreleased]
 
+## [1.0.0-rc.5] - 2026-11-04
+
+Phone testing of `1.0.0-rc.4` still stopped at pairing with “无法生成这台平板的签名密钥。请再试一次。如果仍然失败，请先解除绑定后再绑定。” `DeviceSigningKey.open()` returned null. JVM tests never called AndroidKeyStore. Upstream Android baseline remains **1.15** (`versionCode` 37). Product SemVer `1.0.0-rc.5` / `versionCode` `1000011`. GA `1.0.0` moves to `versionCode` `1000012`.
+
+### Fixed
+
+- Sealing the Ed25519 seed no longer passes a caller-chosen GCM IV into AndroidKeyStore. On a real Android 11 runtime that threw `java.security.InvalidAlgorithmParameterException: Caller-provided IV not permitted`, which `open()` caught and turned into the message above. Encrypt now lets the keystore generate the IV and stores that 12-byte IV with the ciphertext. Decrypt still supplies the stored IV. `net.i2p.crypto:eddsa` 0.3.0 signed and verified on that same runtime (64-byte signature), so the wire format is unchanged. On an Android 14 emulator the hardware Ed25519 key failed its self-test (`InvalidKeyException: Keystore operation failed`, incompatible digest) and the software seed was used; that fallback now seals successfully.
+- Key-generation failures log the exception class and message. Long token-like strings in the message are redacted. Key bytes are not logged. `Throwable` is caught, so an `Error` such as `NoClassDefFoundError` is recorded instead of escaping the `catch (Exception)`.
+
+### Added
+
+- GitHub Actions workflow `.github/workflows/android-e2e.yml` (`pull_request` and `workflow_dispatch`) runs an API 30 and API 34 x86_64 emulator with KVM. It builds the debug and androidTest APKs, starts the Go server with `public_base_url` at `http://10.0.2.2:PORT`, creates an admin and a pair code, then runs `K12DeviceE2ETest`: AndroidKeyStore key, pair to `active`, admin tablet-model push, tablet applies it, and the onboarding title “第一次设置” is visible in dark mode. Logcat and the screenshot are uploaded as artifacts on every run. Plain http is accepted only when a debug test sets the flag; release builds still require https.
+
+### Changed
+
+- Product SemVer → `1.0.0-rc.5` / `versionCode` `1000011`.
+
 ## [1.0.0-rc.4] - 2026-11-04
 
 Phone testing of `1.0.0-rc.3` stopped at pairing: the tablet showed “无法生成这台平板的设备密钥” and never called the server. Upstream Android baseline remains **1.15** (`versionCode` 37). Product SemVer `1.0.0-rc.4` / `versionCode` `1000010`. GA `1.0.0` moves to `versionCode` `1000011`.
@@ -212,7 +229,8 @@ Milestone **M0 · Thin shell**. Upstream Android baseline: **1.15** (`versionCod
 
 - Release keystore material stays out of git; CI fails if a keystore is committed.
 
-[Unreleased]: https://github.com/ChuckPeng/OpenMinis-K12/compare/v1.0.0-rc.4...HEAD
+[Unreleased]: https://github.com/ChuckPeng/OpenMinis-K12/compare/v1.0.0-rc.5...HEAD
+[1.0.0-rc.5]: https://github.com/ChuckPeng/OpenMinis-K12/compare/v1.0.0-rc.4...v1.0.0-rc.5
 [1.0.0-rc.4]: https://github.com/ChuckPeng/OpenMinis-K12/compare/v1.0.0-rc.3...v1.0.0-rc.4
 [1.0.0-rc.3]: https://github.com/ChuckPeng/OpenMinis-K12/compare/v1.0.0-rc.2...v1.0.0-rc.3
 [1.0.0-rc.2]: https://github.com/ChuckPeng/OpenMinis-K12/compare/v1.0.0-rc.1...v1.0.0-rc.2

@@ -85,6 +85,25 @@ class K12PairingAcceptanceTest {
     }
 
     @Test
+    fun cleartextHttpIsOnlyAcceptedForADebugTestFlag() {
+        PairingClient.allowCleartextForTests = false
+        assertEquals(null, PairingClient.normalizeBaseUrl("http://10.0.2.2:18080"))
+        PairingClient.allowCleartextForTests = true
+        try {
+            val normalized = PairingClient.normalizeBaseUrl("http://10.0.2.2:18080")
+            if (com.openminis.app.BuildConfig.DEBUG) {
+                assertEquals("http://10.0.2.2:18080", normalized)
+            } else {
+                assertEquals(null, normalized)
+            }
+            assertEquals(null, PairingClient.normalizeBaseUrl("http://user:pass@10.0.2.2:18080"))
+            assertEquals("https://k12.example.com", PairingClient.normalizeBaseUrl("https://k12.example.com"))
+        } finally {
+            PairingClient.allowCleartextForTests = false
+        }
+    }
+
+    @Test
     fun pendingConfirmDoesNotActivate() {
         var activated = false
         DevicePairing.onActivated = { activated = true }

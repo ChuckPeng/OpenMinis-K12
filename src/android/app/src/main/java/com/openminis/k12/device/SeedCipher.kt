@@ -1,6 +1,5 @@
 package com.openminis.k12.device
 
-import java.security.SecureRandom
 import javax.crypto.Cipher
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
@@ -19,11 +18,13 @@ object SeedCipher {
 
     fun seal(key: SecretKey, seed: ByteArray): ByteArray {
         if (seed.size != Ed25519DeviceKey.SEED_LENGTH) throw SeedCipherException()
-        val iv = ByteArray(IV_LENGTH)
-        SecureRandom().nextBytes(iv)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.ENCRYPT_MODE, key, GCMParameterSpec(TAG_BITS, iv))
+        // AndroidKeyStore generates the GCM IV. Passing one in throws
+        // InvalidAlgorithmParameterException: Caller-provided IV not permitted.
+        cipher.init(Cipher.ENCRYPT_MODE, key)
         val body = cipher.doFinal(seed)
+        val iv = cipher.iv
+        if (iv == null || iv.size != IV_LENGTH) throw SeedCipherException()
         return byteArrayOf(VERSION) + iv + body
     }
 
