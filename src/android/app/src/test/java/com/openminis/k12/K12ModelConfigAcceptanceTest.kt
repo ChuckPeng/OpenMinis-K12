@@ -1,6 +1,10 @@
 package com.openminis.k12
 
+import com.openminis.app.data.model.LLMModel
+import com.openminis.app.data.model.ModelEntry
 import com.openminis.app.data.model.ProviderType
+import com.openminis.k12.model.ManagedModelIds
+import com.openminis.k12.model.staleManagedEntryIds
 import com.openminis.k12.device.DeviceSigner
 import com.openminis.k12.device.HttpResponse
 import com.openminis.k12.device.HttpTransport
@@ -154,6 +158,23 @@ class K12ModelConfigAcceptanceTest {
         }, null)
         assertTrue(forbidden is SyncOutcome.Denied)
         assertNull(store.load())
+    }
+
+    @Test
+    fun rewrittenManagedEntryIdIsKept() {
+        val chat = ModelEntry(
+            providerInstanceId = ManagedModelIds.INSTANCE,
+            baseModel = LLMModel("k12-e2e-model", "k12-e2e-model", "k12"),
+            isCustom = true,
+            uuid = "${ManagedModelIds.INSTANCE}/k12-e2e-model",
+        )
+        val stray = ModelEntry(
+            providerInstanceId = ManagedModelIds.INSTANCE,
+            baseModel = LLMModel("old-model", "old-model", "k12"),
+            uuid = "${ManagedModelIds.INSTANCE}/old-model",
+        )
+        val drop = staleManagedEntryIds(listOf(chat, stray), ManagedModelIds.INSTANCE, setOf("k12-e2e-model"))
+        assertEquals(listOf(stray.id), drop)
     }
 
     @Test
