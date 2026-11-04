@@ -32,6 +32,10 @@
 # shrink Guava / fastutil / Hipparchus down to what those classes reach.
 # java.awt / ImageIO / JMX are only referenced from plotting and desktop
 # helpers that the tutoring path does not load.
+# Device Ed25519 seed. The named curve table is loaded by a string. Keep the
+# small library so release builds still sign with the same 64-byte format.
+-keep class net.i2p.crypto.eddsa.** { *; }
+
 -keep class org.matheclipse.** { *; }
 -keep class edu.jas.** { *; }
 -keep class uk.ac.ed.ph.snuggletex.** { *; }

@@ -43,9 +43,10 @@ class K12M0AcceptanceTest {
         assertTrue(gradle.contains("namespace = \"com.openminis.app\""))
         assertTrue(gradle.contains("ChuckPeng/OpenMinis-K12"))
         assertTrue(gradle.contains("versionName = \"${Version.NAME}\""))
+        val codeTail = (Version.CODE % 1_000).toString().padStart(3, '0')
         assertTrue(
             gradle.contains("versionCode = ${Version.CODE}") ||
-                gradle.contains("versionCode = 1_000_00${Version.CODE % 10}"),
+                gradle.contains("versionCode = 1_000_$codeTail"),
         )
         assertFalse(gradle.contains("applicationId = \"com.openminis.app\""))
         val appName = moduleFile("src/main/res/values/strings.xml").readText()
