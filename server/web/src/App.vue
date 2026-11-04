@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
+import QRCode from "qrcode";
 import { api } from "./api";
 
 type Tab = "wecom" | "parents" | "devices" | "model" | "alerts" | "reports" | "j12" | "audit" | "status";
@@ -31,6 +32,7 @@ const pApprove = ref(true);
 
 const devices = ref<Array<{ id: string; child_id: string; child_label: string; label: string; status: string; last_seen?: string; app_version: string; config_version_applied: number }>>([]);
 const pairCodeResult = ref("");
+const pairQrDataUrl = ref("");
 
 const alerts = ref<Array<{ id: string; level: string; category: string; occurred_at: number; has_snippet: boolean; acknowledged_by?: string; created_at: string }>>([]);
 const activeSnippet = ref("");
@@ -177,8 +179,10 @@ async function generatePairCode() {
   const r = await api<{ pair_code: string; expires_at: string; qr_payload: string }>("/api/v1/admin/pair-codes", { method: "POST", body: "{}" });
   if (r.ok && r.body) {
     pairCodeResult.value = `配对码：${r.body.pair_code}（10分钟内有效）\n载荷：${r.body.qr_payload}`;
+    pairQrDataUrl.value = await QRCode.toDataURL(r.body.qr_payload, { margin: 1, width: 240 });
   } else {
     pairCodeResult.value = "生成失败";
+    pairQrDataUrl.value = "";
   }
 }
 
@@ -463,7 +467,10 @@ onMounted(boot);
       <h2>设备管理与配对 (M5b)</h2>
       <p class="sub">为新平板生成 10 分钟一次性配对码。设备注册后家长在企微确认生效。</p>
       <button @click="generatePairCode">生成 10 分钟配对码</button>
-      <pre v-if="pairCodeResult" class="mono">{{ pairCodeResult }}</pre>
+      <div v-if="pairCodeResult" class="pair-result">
+        <img v-if="pairQrDataUrl" :src="pairQrDataUrl" alt="配对二维码" width="240" height="240" />
+        <pre class="mono">{{ pairCodeResult }}</pre>
+      </div>
 
       <h3 style="margin-top: 24px;">已登记设备</h3>
       <table>

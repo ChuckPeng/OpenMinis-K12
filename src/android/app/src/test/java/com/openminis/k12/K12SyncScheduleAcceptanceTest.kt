@@ -297,6 +297,104 @@ class K12SyncScheduleAcceptanceTest {
     }
 
     @Test
+    fun modelConfigIsNotRefetchedOnTheFifteenMinuteOrForegroundCadence() {
+        assertEquals(24L * 60L * 60L * 1000L, com.openminis.k12.device.ModelConfigSchedule.INTERVAL_MS)
+        val store = MemoryModelSecretStore()
+        val upstream = FakeUpstream()
+        val log = ModelLog()
+        var modelFetches = 0
+        var now = 1_700_000_000_000L
+        val client = client { url, _ ->
+            when {
+                url.endsWith("/api/v1/device/heartbeat") -> json(
+                    """{"server_time":"2026-11-03T00:00:00Z","config_version":1,"tablet_model_version":2,"config_json":{"daily_limit_minutes":40}}""",
+                )
+                url.endsWith("/api/v1/device/tablet-model") -> {
+                    modelFetches++
+                    json(
+                        """{"version":2,"cleared":false,"provider_type":"openAI","base_url":"https://k12.example.com/v1","model_name":"chat-model","vision_model_name":"","api_key":"$secret"}""",
+                    )
+                }
+                else -> json("""{"ok":true}""")
+            }
+        }
+        val cycle = K12SyncCycle(
+            client = client,
+            config = MemoryConfigSink(),
+            events = MemoryStudyEventOutbox(),
+            diagnostics = MemoryDiagnosticOutbox(),
+            onModelVersion = { version, force, fetch ->
+                K12ModelSync.note(version, store, upstream, fetch, log, force)
+            },
+            appVersion = com.openminis.k12.Version.NAME,
+            deviceId = "dev-1",
+            childId = "child-model-a",
+            log = log,
+            modelAppliedVersion = { store.load()?.version ?: 0L },
+            clock = { now },
+        )
+        assertTrue(cycle.run() is SyncRunResult.Ok)
+        assertEquals(1, modelFetches)
+        now += 15 * 60 * 1000
+        assertTrue(cycle.run() is SyncRunResult.Ok)
+        assertEquals(1, modelFetches)
+        now += com.openminis.k12.device.ModelConfigSchedule.INTERVAL_MS
+        assertTrue(cycle.run() is SyncRunResult.Ok)
+        assertEquals(2, modelFetches)
+        val adr = repoFile("docs/k12/decisions/0015-server-managed-tablet-model.md").readText()
+        assertTrue(adr.contains("ModelConfigSchedule.INTERVAL_MS"))
+        assertTrue(adr.contains("24"))
+        val changelog = repoFile("CHANGELOG.md").readText()
+        assertTrue(changelog.contains("ModelConfigSchedule.INTERVAL_MS"))
+    }
+
+    @Test
+    fun newerTabletModelVersionFetchesBeforeTheDailyInterval() {
+        val store = MemoryModelSecretStore()
+        val upstream = FakeUpstream()
+        var announced = 2L
+        var modelFetches = 0
+        val now = 1_700_000_000_000L
+        val client = client { url, _ ->
+            when {
+                url.endsWith("/api/v1/device/heartbeat") -> json(
+                    """{"server_time":"2026-11-03T00:00:00Z","tablet_model_version":$announced}""",
+                )
+                url.endsWith("/api/v1/device/tablet-model") -> {
+                    modelFetches++
+                    json(
+                        """{"version":$announced,"cleared":false,"provider_type":"openAI","base_url":"https://k12.example.com/v1","model_name":"chat-model","vision_model_name":"","api_key":"$secret"}""",
+                    )
+                }
+                else -> json("""{"ok":true}""")
+            }
+        }
+        val cycle = K12SyncCycle(
+            client = client,
+            config = MemoryConfigSink(),
+            events = MemoryStudyEventOutbox(),
+            diagnostics = MemoryDiagnosticOutbox(),
+            onModelVersion = { version, force, fetch ->
+                K12ModelSync.note(version, store, upstream, fetch, null, force)
+            },
+            appVersion = com.openminis.k12.Version.NAME,
+            deviceId = "dev-1",
+            childId = "child-model-a",
+            modelAppliedVersion = { store.load()?.version ?: 0L },
+            clock = { now },
+        )
+        assertTrue(cycle.run() is SyncRunResult.Ok)
+        assertEquals(1, modelFetches)
+        announced = 3L
+        assertTrue(cycle.run() is SyncRunResult.Ok)
+        assertEquals(2, modelFetches)
+        assertEquals(3L, store.load()?.version)
+        assertFalse(logContains(store.load()?.toString().orEmpty()))
+    }
+
+    private fun logContains(text: String): Boolean = text.contains(secret)
+
+    @Test
     fun pinMismatchStopsWithoutARetry() {
         val client = SyncClient(
             SyncConfig("https://example.invalid", "dev-1"),
@@ -312,8 +410,8 @@ class K12SyncScheduleAcceptanceTest {
             config = MemoryConfigSink(),
             events = MemoryStudyEventOutbox(),
             diagnostics = MemoryDiagnosticOutbox(),
-            onModelVersion = { _, _ -> },
-            appVersion = "1.0.0-rc.2",
+            onModelVersion = { _, _, _ -> com.openminis.k12.model.SyncOutcome.Unchanged },
+            appVersion = com.openminis.k12.Version.NAME,
             deviceId = "dev-1",
             childId = "child-model-a",
         ).run()
@@ -333,13 +431,15 @@ class K12SyncScheduleAcceptanceTest {
         config = config,
         events = events,
         diagnostics = diagnostics,
-        onModelVersion = { version, fetch ->
-            K12ModelSync.note(version, store, upstream, fetch, log)
+        onModelVersion = { version, force, fetch ->
+            K12ModelSync.note(version, store, upstream, fetch, log, force)
         },
-        appVersion = "1.0.0-rc.2",
+        appVersion = com.openminis.k12.Version.NAME,
         deviceId = "dev-1",
         childId = "child-model-a",
         log = log,
+        modelAppliedVersion = { store.load()?.version ?: 0L },
+        clock = { 1_700_000_000_000L },
     )
 
     private fun json(text: String, code: Int = 200) = HttpResponse(code, emptyMap(), text.toByteArray())

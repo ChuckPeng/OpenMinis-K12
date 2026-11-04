@@ -57,6 +57,12 @@ object Wizard {
 
     fun canLeaveSecrets(profile: Profile): Boolean = profile.hasPin() && !profile.backupHash.isNullOrBlank()
 
+    /** Optional server pairing. Skipping still calls [complete]. */
+    fun openPairing(state: K12State): K12State {
+        if (!canLeaveSecrets(state.profile) || state.profile.stage == null) return state
+        return state.copy(profile = state.profile.copy(onboardingStep = OnboardingStep.PAIRING))
+    }
+
     fun complete(state: K12State): K12State {
         if (!canLeaveSecrets(state.profile)) return state
         if (state.profile.stage == null || !Ids.isUuidV4(state.profile.childId)) return state

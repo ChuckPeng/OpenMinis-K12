@@ -148,6 +148,7 @@ func (s *Server) createPairCode(w http.ResponseWriter, r *http.Request) {
 	exp := time.Now().UTC().Add(ttl).Format(time.RFC3339Nano)
 	qrPayload := map[string]string{
 		"public_base_url": s.Cfg.PublicBaseURL,
+		"base_url":        s.Cfg.PublicBaseURL,
 		"pair_code":       code,
 	}
 	qrBytes, _ := json.Marshal(qrPayload)

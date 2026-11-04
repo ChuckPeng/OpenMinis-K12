@@ -22,6 +22,23 @@ object SyncSchedule {
     const val MAX_EVENT_BATCH = 500
 }
 
+/**
+ * How often a paired tablet may pull `GET /api/v1/device/tablet-model`.
+ * The 15-minute job still sends the heartbeat and uploads usage. It pulls the
+ * full model document on the first success after pairing, again when the
+ * heartbeat's `tablet_model_version` changes, and otherwise at most once per
+ * [INTERVAL_MS]. A failed pull does not count, so the next sync retries.
+ */
+object ModelConfigSchedule {
+    const val INTERVAL_MS = 24L * 60L * 60L * 1000L
+
+    fun shouldFetch(announced: Long, applied: Long, lastSuccessAtMs: Long, nowMs: Long): Boolean {
+        if (announced != applied) return true
+        if (lastSuccessAtMs <= 0L) return true
+        return nowMs - lastSuccessAtMs >= INTERVAL_MS
+    }
+}
+
 enum class SyncTrigger { FOREGROUND, PAIRED, QUEUE }
 
 interface SyncScheduler {
@@ -259,22 +276,29 @@ fun diagnosticAllowed(json: String): Boolean {
 }
 
 /**
- * One sync pass: heartbeat, apply config, tablet-model fetch when the version
- * changed, then queued events and diagnostics. The API key is never logged.
+ * One sync pass: heartbeat, apply config, tablet-model fetch when
+ * [ModelConfigSchedule] allows it, then queued events and diagnostics.
+ * The API key is never logged.
  */
 class K12SyncCycle(
     private val client: SyncClient,
     private val config: DeviceConfigSink,
     private val events: StudyEventOutbox,
     private val diagnostics: DiagnosticOutbox,
-    private val onModelVersion: (Long, () -> ModelFetch) -> Unit,
+    private val onModelVersion: (Long, Boolean, () -> ModelFetch) -> com.openminis.k12.model.SyncOutcome,
     private val appVersion: String,
     private val deviceId: String,
     private val childId: String,
     private val dailyUsedMinutes: Int = 0,
     private val permission: JSONObject? = null,
     private val log: ModelLog? = null,
+    private val modelAppliedVersion: () -> Long = { 0L },
+    private val clock: () -> Long = { System.currentTimeMillis() },
+    initialModelFetchAtMs: Long = 0L,
+    private val onModelFetched: (Long) -> Unit = {},
 ) {
+    var lastModelFetchAtMs: Long = initialModelFetchAtMs
+        private set
     fun run(): SyncRunResult {
         val posted = try {
             client.postHeartbeat(config.appliedVersion(), appVersion, dailyUsedMinutes, permission)
@@ -299,9 +323,25 @@ class K12SyncCycle(
             config.apply(beat.configVersion, beat.config)
         }
         log?.info("heartbeat version=${beat.configVersion} model=${beat.tabletModelVersion}")
+        val modelResult = pullModelIfDue(beat.tabletModelVersion)
+        if (modelResult != null) return modelResult
+        val uploaded = uploadEvents()
+        if (uploaded !is SyncRunResult.Ok) return uploaded
+        return uploadDiagnostics()
+    }
+
+    /**
+     * Null means the pass should continue with uploads. A non-null result stops it.
+     * Same-version pulls inside [ModelConfigSchedule.INTERVAL_MS] do not call the network.
+     */
+    private fun pullModelIfDue(announced: Long): SyncRunResult? {
+        val now = clock()
+        if (!ModelConfigSchedule.shouldFetch(announced, modelAppliedVersion(), lastModelFetchAtMs, now)) {
+            return null
+        }
         var modelDenied = 0
-        try {
-            onModelVersion(beat.tabletModelVersion) {
+        val outcome = try {
+            onModelVersion(announced, announced == modelAppliedVersion()) {
                 val resp = client.fetchTabletModel()
                 when (resp.code) {
                     200 -> ModelFetch.Body(resp.bodyText)
@@ -318,9 +358,13 @@ class K12SyncCycle(
             return SyncRunResult.Retry(0)
         }
         if (modelDenied == 401 || modelDenied == 403) return SyncRunResult.Stop(modelDenied)
-        val uploaded = uploadEvents()
-        if (uploaded !is SyncRunResult.Ok) return uploaded
-        return uploadDiagnostics()
+        if (outcome is com.openminis.k12.model.SyncOutcome.Applied ||
+            outcome is com.openminis.k12.model.SyncOutcome.Cleared
+        ) {
+            lastModelFetchAtMs = now
+            onModelFetched(now)
+        }
+        return null
     }
 
     private fun uploadEvents(): SyncRunResult {

@@ -29,8 +29,13 @@ object K12ModelRuntime {
 
     fun pageStatus(): ModelPageStatus = synchronized(lock) { K12ModelSync.pageStatus(store) }
 
-    fun noteHeartbeatVersion(version: Long, fetch: () -> ModelFetch, log: ModelLog? = null): SyncOutcome {
-        val outcome = synchronized(lock) { K12ModelSync.note(version, store, upstream, fetch, log) }
+    fun noteHeartbeatVersion(
+        version: Long,
+        fetch: () -> ModelFetch,
+        log: ModelLog? = null,
+        force: Boolean = false,
+    ): SyncOutcome {
+        val outcome = synchronized(lock) { K12ModelSync.note(version, store, upstream, fetch, log, force) }
         bump()
         return outcome
     }

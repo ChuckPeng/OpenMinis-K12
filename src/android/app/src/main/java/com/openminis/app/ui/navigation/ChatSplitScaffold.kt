@@ -927,7 +927,13 @@ fun ChatSplitScaffoldRoute(
                 // phone behaviour is unchanged.
                 onSessionClick = onSessionSelected,
                 onNewChat = onSessionSelected,
-                onSettingsClick = { navController.safeNavigate(Routes.SETTINGS) },
+                onSettingsClick = {
+                    if (com.openminis.k12.android.K12Runtime.installed) {
+                        navController.navigate(com.openminis.k12.StudyEntry.PARENT_GATE.replace("{next}", "parent"))
+                    } else {
+                        navController.safeNavigate(Routes.SETTINGS)
+                    }
+                },
                 onAddProviderClick = { navController.safeNavigate(Routes.ADD_PROVIDER) },
                 onSelectModelsClick = { navController.safeNavigate(Routes.ONBOARDING_MODELS) },
                 onRestoreBackupClick = {
@@ -942,6 +948,12 @@ fun ChatSplitScaffoldRoute(
                 // [T-android-draft-placeholder-row] Synthetic "New Chat" row,
                 // never persisted — see the listPane param docs.
                 draftPlaceholderId = draftPlaceholderId,
+                onK12Pair = {
+                    navController.navigate(com.openminis.k12.StudyEntry.PARENT_GATE.replace("{next}", "parent"))
+                },
+                onK12ManualModel = {
+                    navController.navigate(com.openminis.k12.StudyEntry.PARENT_GATE.replace("{next}", "providers"))
+                },
             )
         },
         detailPane = { sessionId, onBackInPane, onNewChatInPane, onMoveToInPane,

@@ -7,6 +7,8 @@ import com.openminis.k12.device.DeviceSigner
 import java.security.KeyPairGenerator
 import java.security.KeyStore
 import java.security.PrivateKey
+import java.security.PublicKey
+import java.util.Base64
 
 /**
  * Device signing key in the Android Keystore. The private key never leaves
@@ -27,6 +29,25 @@ object DeviceSigningKey {
         } catch (_: Exception) {
             null
         }
+    }
+
+    /** Raw 32-byte Ed25519 public key, standard Base64. Empty when the key is not Ed25519. */
+    fun publicKeyBase64(context: Context): String? {
+        return try {
+            ensure(context)
+            val cert = keyStore().getCertificate(ALIAS) ?: return null
+            val raw = rawEd25519(cert.publicKey) ?: return null
+            Base64.getEncoder().encodeToString(raw)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    fun rawEd25519(publicKey: PublicKey): ByteArray? {
+        val encoded = publicKey.encoded ?: return null
+        if (!publicKey.algorithm.equals("Ed25519", ignoreCase = true)) return null
+        if (encoded.size < 32) return null
+        return encoded.copyOfRange(encoded.size - 32, encoded.size)
     }
 
     fun ensure(context: Context) {

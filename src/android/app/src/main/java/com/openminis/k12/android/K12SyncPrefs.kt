@@ -45,6 +45,12 @@ class K12SyncPrefs(context: Context) {
         prefs.edit().putInt(KEY_VERSION, version).apply()
     }
 
+    fun lastModelFetchAt(): Long = prefs.getLong(KEY_MODEL_FETCH, 0L)
+
+    fun setLastModelFetchAt(epochMs: Long) {
+        prefs.edit().putLong(KEY_MODEL_FETCH, epochMs).apply()
+    }
+
     val events: StudyEventOutbox = EventBox()
     val diagnostics: DiagnosticOutbox = DiagBox()
 
@@ -174,6 +180,7 @@ class K12SyncPrefs(context: Context) {
         const val KEY_CHILD = "child_id"
         const val KEY_CERT = "cert"
         const val KEY_VERSION = "config_version"
+        const val KEY_MODEL_FETCH = "model_fetch_at"
         const val KEY_EVENTS = "events"
         const val KEY_DIAG = "diagnostics"
     }

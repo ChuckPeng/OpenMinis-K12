@@ -2,8 +2,8 @@ package com.openminis.k12.android
 
 import androidx.navigation.NavController
 import androidx.navigation.NavDestination
-import com.openminis.k12.ColdStart
 import com.openminis.k12.RoutePolicy
+import com.openminis.k12.StudyEntry
 
 object K12Nav {
     private var redirecting = false
@@ -17,11 +17,13 @@ object K12Nav {
     fun redirectIfBlocked(controller: NavController, route: String? = controller.currentDestination?.route) {
         if (redirecting || route == null) return
         if (!K12Gates.routeBlocked(route)) return
-        val dest = if (K12Runtime.snapshot().profile.onboardingComplete) {
-            ColdStart.HOME
-        } else {
-            ColdStart.ONBOARDING
-        }
+        val snap = K12Runtime.snapshot()
+        val dest = StudyEntry.destination(
+            onboardingComplete = snap.profile.onboardingComplete,
+            paired = snap.profile.pairing == "active",
+            chatReady = K12Runtime.chatReady(),
+            studyLocked = K12Runtime.studyLocked(),
+        )
         if (route.substringBefore('?') == dest) return
         redirecting = true
         try {

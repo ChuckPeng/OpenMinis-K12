@@ -70,10 +70,10 @@ object DevicePairing {
             return try {
                 val json = JSONObject(trimmed)
                 PairingPayload(
-                    baseUrl = json.optString("base_url", json.optString("url", "")),
-                    certFingerprint = json.optString("cert_fingerprint", json.optString("cert", "")),
-                    serverPubkey = json.optString("server_pubkey", json.optString("pubkey", "")),
-                    pairCode = json.optString("pair_code", json.optString("code", "")),
+                    baseUrl = json.firstString("base_url", "public_base_url", "url"),
+                    certFingerprint = json.firstString("cert_fingerprint", "cert"),
+                    serverPubkey = json.firstString("server_pubkey", "pubkey"),
+                    pairCode = json.firstString("pair_code", "code"),
                 ).takeIf { it.baseUrl.isNotBlank() && it.pairCode.isNotBlank() }
             } catch (_: Exception) {
                 null
@@ -90,10 +90,10 @@ object DevicePairing {
                     k to v
                 }
                 PairingPayload(
-                    baseUrl = params["url"] ?: params["base_url"] ?: "",
-                    certFingerprint = params["cert"] ?: params["cert_fingerprint"] ?: "",
-                    serverPubkey = params["pubkey"] ?: params["server_pubkey"] ?: "",
-                    pairCode = params["code"] ?: params["pair_code"] ?: "",
+                    baseUrl = params.firstString("url", "base_url", "public_base_url"),
+                    certFingerprint = params.firstString("cert", "cert_fingerprint"),
+                    serverPubkey = params.firstString("pubkey", "server_pubkey"),
+                    pairCode = params.firstString("code", "pair_code"),
                 ).takeIf { it.baseUrl.isNotBlank() && it.pairCode.isNotBlank() }
             } catch (_: Exception) {
                 null
@@ -121,5 +121,21 @@ object DevicePairing {
     fun formatQrUri(payload: PairingPayload): String {
         val enc = { s: String -> URLEncoder.encode(s, "UTF-8") }
         return "k12://pair?url=${enc(payload.baseUrl)}&cert=${enc(payload.certFingerprint)}&pubkey=${enc(payload.serverPubkey)}&code=${enc(payload.pairCode)}"
+    }
+
+    private fun JSONObject.firstString(vararg keys: String): String {
+        for (key in keys) {
+            val value = optString(key, "").trim()
+            if (value.isNotEmpty()) return value
+        }
+        return ""
+    }
+
+    private fun Map<String, String>.firstString(vararg keys: String): String {
+        for (key in keys) {
+            val value = this[key]?.trim().orEmpty()
+            if (value.isNotEmpty()) return value
+        }
+        return ""
     }
 }

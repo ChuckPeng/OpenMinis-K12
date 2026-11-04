@@ -16,6 +16,8 @@ object K12Gates {
             onboardingComplete = snap.profile.onboardingComplete,
             parentUnlocked = snap.parent.unlocked,
             studyLocked = K12Runtime.studyLocked(),
+            chatReady = K12Runtime.chatReady(),
+            paired = snap.profile.pairing == "active",
         )
     }
 

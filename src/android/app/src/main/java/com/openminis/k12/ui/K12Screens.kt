@@ -36,11 +36,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.openminis.app.R
 import com.openminis.k12.OnboardingStep
 import com.openminis.k12.PermissionItem
 import com.openminis.k12.PermissionReport
-import com.openminis.k12.PinResult
-import com.openminis.app.R
 import com.openminis.k12.ScreenTime
 import com.openminis.k12.SecretSubmit
 import com.openminis.k12.StudyStage
@@ -62,75 +61,13 @@ fun K12BreakBannerHost() {
 }
 
 @Composable
-fun K12ChildHomeScreen(onStudy: () -> Unit, onParent: () -> Unit) {
-    val snap = K12Runtime.ui.value
-    val now = System.currentTimeMillis()
-    val remainingMin = (ScreenTime.remainingMs(snap, now) / 60_000L).toInt()
-    val limited = ScreenTime.limitReached(snap, now)
-    val breakDue = ScreenTime.breakDue(snap)
-    var pinOpen by remember { mutableStateOf(false) }
-    var pinForExtend by remember { mutableStateOf(false) }
-    var pinError by remember { mutableStateOf<String?>(null) }
-    val wrong = stringResource(R.string.k12_pin_wrong)
-    val locked = stringResource(R.string.k12_pin_locked)
-    Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+private fun K12Surface(content: @Composable () -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background,
+        contentColor = MaterialTheme.colorScheme.onBackground,
     ) {
-        Text(
-            text = stringResource(R.string.k12_home_title),
-            style = MaterialTheme.typography.headlineLarge,
-            modifier = Modifier.semantics { heading() },
-        )
-        snap.profile.stage?.let { Text(it.label, style = MaterialTheme.typography.titleMedium) }
-        snap.profile.nickname?.let { Text(it, style = MaterialTheme.typography.bodyLarge) }
-        Text(stringResource(R.string.k12_home_remaining, remainingMin))
-        if (snap.profile.stage?.curriculumInV1() == false) {
-            Text(stringResource(R.string.k12_home_senior))
-        }
-        if (breakDue) Text(stringResource(R.string.k12_home_break))
-        if (limited) Text(stringResource(R.string.k12_home_limit))
-        Button(
-            onClick = onStudy,
-            enabled = !limited,
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text(stringResource(R.string.k12_home_study)) }
-        if (limited) {
-            OutlinedButton(
-                onClick = { pinForExtend = true; pinOpen = true; pinError = null },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.k12_home_extend))
-            }
-        }
-        OutlinedButton(
-            onClick = { pinForExtend = false; pinOpen = true; pinError = null },
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(stringResource(R.string.k12_home_parent))
-        }
-    }
-    if (pinOpen) {
-        PinDialog(
-            error = pinError,
-            onDismiss = { pinOpen = false },
-            onSubmit = { pin ->
-                if (pinForExtend) {
-                    when (val result = K12Runtime.grantWithPin(pin)) {
-                        is PinResult.Accepted -> pinOpen = false
-                        is PinResult.Rejected -> pinError = if (result.locked) locked else wrong
-                    }
-                } else {
-                    when (val result = K12Runtime.unlock(pin)) {
-                        is PinResult.Accepted -> {
-                            pinOpen = false
-                            onParent()
-                        }
-                        is PinResult.Rejected -> pinError = if (result.locked) locked else wrong
-                    }
-                }
-            },
-        )
+        content()
     }
 }
 
@@ -143,6 +80,7 @@ fun K12OnboardingScreen(onFinished: () -> Unit) {
     var backupAgain by remember { mutableStateOf("") }
     var secretError by remember { mutableStateOf(false) }
     var nick by remember(snap.profile.nickname) { mutableStateOf(snap.profile.nickname.orEmpty()) }
+    K12Surface {
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -219,14 +157,24 @@ fun K12OnboardingScreen(onFinished: () -> Unit) {
                 Text(stringResource(R.string.k12_onboarding_later))
                 PermissionList(K12Runtime.permissionReport())
                 Button(
-                    onClick = {
+                    onClick = { K12Runtime.openPairing() },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text(stringResource(R.string.k12_onboarding_next)) }
+            }
+            OnboardingStep.PAIRING -> {
+                K12PairingSection(
+                    onPaired = {
                         K12Runtime.completeOnboarding()
                         onFinished()
                     },
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text(stringResource(R.string.k12_onboarding_finish)) }
+                    onSkip = {
+                        K12Runtime.completeOnboarding()
+                        onFinished()
+                    },
+                )
             }
         }
+    }
     }
 }
 
@@ -259,6 +207,7 @@ private fun SecretFields(
 @Composable
 fun K12PermissionScreen(onBack: () -> Unit) {
     var report by remember { mutableStateOf(K12Runtime.permissionReport()) }
+    K12Surface {
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -275,6 +224,7 @@ fun K12PermissionScreen(onBack: () -> Unit) {
         OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
             Text(stringResource(R.string.k12_onboarding_back))
         }
+    }
     }
 }
 
@@ -336,6 +286,8 @@ fun K12ParentScreen(
     var daily by remember(limits.dailyMin) { mutableStateOf(limits.dailyMin.toString()) }
     var weekend by remember(limits.weekendExtraMin) { mutableStateOf(limits.weekendExtraMin.toString()) }
     var breakMin by remember(limits.breakMin) { mutableStateOf(limits.breakMin.toString()) }
+    val managed = k12ModelManagedNow()
+    K12Surface {
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -346,6 +298,11 @@ fun K12ParentScreen(
             modifier = Modifier.semantics { heading() },
         )
         Text(stringResource(R.string.k12_parent_backup_set))
+        Text(
+            stringResource(R.string.k12_parent_model_status) + " · " +
+                stringResource(if (managed) R.string.k12_parent_model_managed else R.string.k12_parent_model_local),
+        )
+        K12PairingSection()
         Text(stringResource(R.string.k12_parent_limits), style = MaterialTheme.typography.titleMedium)
         OutlinedTextField(daily, { daily = it.filter(Char::isDigit).take(3) }, label = { Text(stringResource(R.string.k12_parent_daily)) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
         OutlinedTextField(weekend, { weekend = it.filter(Char::isDigit).take(3) }, label = { Text(stringResource(R.string.k12_parent_weekend)) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
@@ -371,12 +328,12 @@ fun K12ParentScreen(
         }
         LaterRow(stringResource(R.string.k12_parent_reveal))
         LaterRow(stringResource(R.string.k12_parent_totp))
-        LaterRow(stringResource(R.string.k12_parent_pairing))
         LaterRow(stringResource(R.string.k12_parent_catalog))
         LaterRow(stringResource(R.string.k12_parent_unlock))
         OutlinedButton(onClick = onExit, modifier = Modifier.fillMaxWidth()) {
             Text(stringResource(R.string.k12_parent_lock))
         }
+    }
     }
 }
 
@@ -389,7 +346,7 @@ private fun LaterRow(title: String) {
 }
 
 @Composable
-private fun PinDialog(error: String?, onDismiss: () -> Unit, onSubmit: (String) -> Unit) {
+internal fun PinDialog(error: String?, onDismiss: () -> Unit, onSubmit: (String) -> Unit) {
     var pin by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,

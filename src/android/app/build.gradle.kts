@@ -48,8 +48,8 @@ android {
         targetSdk = 35
         // K12 SemVer — independent of upstream. See docs/k12/conventions.md
         // and com.openminis.k12.Version. Upstream baseline was 1.15 / 37.
-        versionCode = 1_000_008
-        versionName = "1.0.0-rc.2"
+        versionCode = 1_000_009
+        versionName = "1.0.0-rc.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -464,6 +464,7 @@ dependencies {
     implementation("androidx.compose.material3.adaptive:adaptive-layout:1.2.0")
     implementation("androidx.compose.material3.adaptive:adaptive-navigation:1.2.0")
     implementation("androidx.compose.ui:ui")
+    implementation("com.google.zxing:core:3.5.3")
     // [T-android-jankdiag] ProfileVerifier (ART compile state in the jank log).
     // Already in the APK through Compose at this version; declared to compile against it.
     implementation("androidx.profileinstaller:profileinstaller:1.4.0")
