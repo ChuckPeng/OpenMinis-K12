@@ -541,7 +541,11 @@ fun AppNavigation(
         is DeepLinkAction.NewChat -> Routes.chat("__new__${java.util.UUID.randomUUID()}")
         else -> null
     }
+    val k12BlocksShortcut = com.openminis.k12.android.K12Runtime.installed &&
+        !com.openminis.k12.android.K12Runtime.parentUnlocked() &&
+        (com.openminis.k12.android.K12Runtime.studyLocked() || !com.openminis.k12.android.K12Runtime.chatReady())
     val startDestination = when {
+        k12BlocksShortcut -> com.openminis.k12.android.K12Runtime.coldStartRoute()
         htmlShortcut != null -> {
             // Seed coordinator before NavHost composition so ChatScreen sees
             // the pending state on its very first LaunchedEffect tick.
@@ -554,6 +558,13 @@ fun AppNavigation(
         }
         quickActionStart != null -> quickActionStart
         else -> com.openminis.k12.android.K12Runtime.coldStartRoute()
+    }
+    val providerConfig by providerRepository.config.collectAsState()
+    val k12Ui = com.openminis.k12.android.K12Runtime.ui.value
+    val k12ModelRevision = com.openminis.k12.model.K12ModelRuntime.revision.value
+    LaunchedEffect(k12Ui.profile.pairing, k12Ui.profile.onboardingComplete, k12ModelRevision, providerConfig.instances.size) {
+        com.openminis.k12.android.K12Runtime.setLocalProviderReady(providerConfig.instances.isNotEmpty())
+        com.openminis.k12.android.K12Nav.redirectIfBlocked(navController)
     }
     DisposableEffect(navController) {
         val listener = androidx.navigation.NavController.OnDestinationChangedListener { controller, destination, _ ->
@@ -626,20 +637,51 @@ fun AppNavigation(
             ) + fadeOut(animationSpec = tween(200, easing = EmphasizedAccelerate))
         },
     ) {
-        composable(com.openminis.k12.ColdStart.HOME) {
-            com.openminis.k12.ui.K12ChildHomeScreen(
-                onStudy = {
-                    if (!com.openminis.k12.android.K12Runtime.studyLocked()) {
-                        navController.navigate(Routes.SESSION_LIST)
+        composable(com.openminis.k12.StudyEntry.NEED_PAIRING) {
+            com.openminis.k12.ui.K12BeforeChatScreen(
+                paired = false,
+                onPair = { navController.navigate(com.openminis.k12.StudyEntry.PARENT_GATE.replace("{next}", "parent")) },
+                onManual = { navController.navigate(com.openminis.k12.StudyEntry.PARENT_GATE.replace("{next}", "providers")) },
+            )
+        }
+        composable(com.openminis.k12.StudyEntry.WAITING) {
+            com.openminis.k12.ui.K12BeforeChatScreen(
+                paired = true,
+                onPair = { navController.navigate(com.openminis.k12.StudyEntry.PARENT_GATE.replace("{next}", "parent")) },
+                onManual = { navController.navigate(com.openminis.k12.StudyEntry.PARENT_GATE.replace("{next}", "providers")) },
+            )
+        }
+        composable(com.openminis.k12.StudyEntry.LOCKED) {
+            com.openminis.k12.ui.K12ScreenLockScreen(
+                onExtended = {
+                    navController.navigate(com.openminis.k12.StudyEntry.SESSIONS) {
+                        popUpTo(navController.graph.id) { inclusive = true }
                     }
                 },
-                onParent = { navController.navigate(com.openminis.k12.ColdStart.PARENT) },
+                onParent = { navController.navigate(com.openminis.k12.StudyEntry.PARENT_GATE.replace("{next}", "parent")) },
+            )
+        }
+        composable(
+            route = com.openminis.k12.StudyEntry.PARENT_GATE,
+            arguments = listOf(navArgument("next") {
+                type = NavType.StringType
+                defaultValue = "parent"
+            }),
+        ) { entry ->
+            val next = entry.arguments?.getString("next") ?: "parent"
+            com.openminis.k12.ui.K12ParentGateScreen(
+                onUnlocked = {
+                    val dest = if (next == "providers") Routes.PROVIDER_LIST else com.openminis.k12.ColdStart.PARENT
+                    navController.popBackStack()
+                    navController.navigate(dest)
+                },
             )
         }
         composable(com.openminis.k12.ColdStart.ONBOARDING) {
             com.openminis.k12.ui.K12OnboardingScreen(
                 onFinished = {
-                    navController.navigate(com.openminis.k12.ColdStart.HOME) {
+                    val dest = com.openminis.k12.android.K12Runtime.coldStartRoute()
+                    navController.navigate(dest) {
                         popUpTo(com.openminis.k12.ColdStart.ONBOARDING) { inclusive = true }
                     }
                 },
@@ -649,8 +691,9 @@ fun AppNavigation(
             com.openminis.k12.ui.K12ParentScreen(
                 onExit = {
                     com.openminis.k12.android.K12Runtime.lock()
-                    navController.navigate(com.openminis.k12.ColdStart.HOME) {
-                        popUpTo(com.openminis.k12.ColdStart.HOME) { inclusive = true }
+                    val dest = com.openminis.k12.android.K12Runtime.coldStartRoute()
+                    navController.navigate(dest) {
+                        popUpTo(navController.graph.id) { inclusive = true }
                     }
                 },
                 onPermissions = { navController.navigate(com.openminis.k12.ColdStart.PERMISSIONS) },

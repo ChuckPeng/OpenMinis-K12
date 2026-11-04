@@ -636,6 +636,8 @@ fun SessionListScreen(
      * prepends the same placeholder in split mode.
      */
     draftPlaceholderId: String? = null,
+    onK12Pair: () -> Unit = {},
+    onK12ManualModel: () -> Unit = {},
 ) {
     val context = LocalContext.current
     // T46: hoist VM ownership to the NavBackStackEntry's ViewModelStore so
@@ -987,6 +989,7 @@ fun SessionListScreen(
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 20.sp,
                             )
+                            com.openminis.k12.ui.K12ScreenTimeChip()
                             // [FEAT-261021-07] Tailscale / proxy state; nothing when neither is set up.
                             NetworkStatusBadges(onOpen = onNetworkPageClick)
                         }
@@ -1148,18 +1151,31 @@ fun SessionListScreen(
                             )
                         }
                     } else if (configLoaded) {
-                        // Show the 3-step onboarding whenever there are no sessions —
-                        // Step 3 (Start a Conversation) is the call-to-action after the
-                        // user finishes Steps 1 and 2, so we must keep the landing
-                        // visible even when hasProviders && hasGroups. Mirrors iOS
-                        // ContentView.emptyState.
-                        // [T-android-startup-config-stall] Gated on configLoaded so
-                        // hasProviders/hasGroups reflect the real persisted config —
-                        // otherwise a returning user with providers but no sessions
-                        // would briefly see the "add a provider" step before the
-                        // async config load emits. The list branch (sessions present)
-                        // is intentionally NOT gated, so users with history still see
-                        // it immediately without waiting on the config decode.
+                        val k12Installed = com.openminis.k12.android.K12Runtime.installed
+                        val k12Snap = com.openminis.k12.android.K12Runtime.ui.value
+                        val k12ModelRevision = com.openminis.k12.model.K12ModelRuntime.revision.value
+                        val k12ChatReady = k12Installed && k12ModelRevision >= 0 &&
+                            com.openminis.k12.android.K12Runtime.chatReady()
+                        if (k12Installed && k12ChatReady) {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.k12_chat_empty),
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        } else if (k12Installed) {
+                            com.openminis.k12.ui.K12BeforeChatScreen(
+                                paired = k12Snap.profile.pairing == "active",
+                                onPair = onK12Pair,
+                                onManual = onK12ManualModel,
+                            )
+                        } else {
+                        // Stock Minis welcome. The K12 build replaces this when
+                        // the tablet has no server model and no local provider.
                         OnboardingLanding(
                             hasProviders = hasProviders,
                             hasGroups = hasGroups,
@@ -1173,6 +1189,7 @@ fun SessionListScreen(
                                 }
                             },
                         )
+                        }
                     }
                 } else {
                     LazyColumn(

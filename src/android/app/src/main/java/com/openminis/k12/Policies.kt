@@ -17,7 +17,34 @@ object ColdStart {
     const val PERMISSIONS = "k12/permissions"
 
     fun route(onboardingComplete: Boolean): String =
-        if (onboardingComplete) HOME else ONBOARDING
+        if (onboardingComplete) StudyEntry.NEED_PAIRING else ONBOARDING
+}
+
+/**
+ * Where a K12 tablet opens after onboarding. The retired child home is not a
+ * destination. Chat is the session list once a model is available.
+ */
+object StudyEntry {
+    const val SESSIONS = "sessions"
+    const val NEED_PAIRING = "k12/need-pairing"
+    const val WAITING = "k12/waiting-model"
+    const val LOCKED = "k12/screen-lock"
+    const val PARENT_GATE_PATH = "k12/parent-gate"
+    const val PARENT_GATE = "k12/parent-gate?next={next}"
+
+    fun chatReady(managed: Boolean, localReady: Boolean): Boolean = managed || localReady
+
+    fun destination(
+        onboardingComplete: Boolean,
+        paired: Boolean,
+        chatReady: Boolean,
+        studyLocked: Boolean,
+    ): String {
+        if (!onboardingComplete) return ColdStart.ONBOARDING
+        if (!chatReady) return if (paired) WAITING else NEED_PAIRING
+        if (studyLocked) return LOCKED
+        return SESSIONS
+    }
 }
 
 object RoutePolicy {
@@ -53,21 +80,35 @@ object RoutePolicy {
         onboardingComplete: Boolean,
         parentUnlocked: Boolean,
         studyLocked: Boolean,
+        chatReady: Boolean = true,
+        paired: Boolean = false,
     ): Boolean {
         if (route == null) return false
         val path = route.substringBefore('?')
         if (!onboardingComplete) return path != ColdStart.ONBOARDING
-        if (path == ColdStart.ONBOARDING || path == ColdStart.HOME) return false
+        if (path == StudyEntry.PARENT_GATE_PATH) return false
         if (path == ColdStart.PARENT || path == ColdStart.PERMISSIONS) return !parentUnlocked
         val base = path.substringBefore('/')
         if (base in parentBases) return !parentUnlocked
+        val dest = StudyEntry.destination(
+            onboardingComplete = true,
+            paired = paired,
+            chatReady = chatReady,
+            studyLocked = studyLocked,
+        )
+        if (path == dest) return false
+        if (path == ColdStart.ONBOARDING || path == ColdStart.HOME) return true
+        if (path == StudyEntry.NEED_PAIRING || path == StudyEntry.WAITING || path == StudyEntry.LOCKED) return true
+        if (!chatReady && isStudy(path)) return true
         if (studyLocked && isStudy(path)) return true
         return false
     }
 
     fun isChildFacing(route: String?): Boolean {
         val path = route?.substringBefore('?') ?: return false
-        if (path == ColdStart.HOME) return true
+        if (path == ColdStart.HOME || path == StudyEntry.NEED_PAIRING || path == StudyEntry.WAITING || path == StudyEntry.LOCKED) {
+            return true
+        }
         return isStudy(path)
     }
 

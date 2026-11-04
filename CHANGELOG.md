@@ -8,6 +8,29 @@ as defined in `docs/k12/conventions.md` (K12 SemVer is independent of upstream M
 
 ## [Unreleased]
 
+## [1.0.0-rc.3] - 2026-11-04
+
+Phone testing of `1.0.0-rc.2` found three blockers. This candidate fixes them and drops the dedicated child home page. Upstream Android baseline remains **1.15** (`versionCode` 37). Product SemVer `1.0.0-rc.3` / `versionCode` `1000009` (STAGE 9). That uses the last single-digit STAGE on the `1.0.0` line, so GA `1.0.0` will use `versionCode` `1000010`.
+
+### Fixed
+
+- System dark mode no longer paints K12 text black on a black background. `MinisTheme` and `MinisAppearance` provide `LocalContentColor` as `colorScheme.onBackground`. K12 roots use a `Surface` with that background and content color, covering onboarding, parent settings, permissions, pairing, waiting, and the screen-time lock.
+
+### Added
+
+- Tablet pairing in the PIN-gated parent area, and as a skippable last onboarding step (“绑定家长服务器”). The parent enters the server URL (https only, no userinfo) and the 6-digit pair code, pastes the admin payload, or scans the QR (`k12://pair` or the JSON payload). The tablet posts its raw Ed25519 public key to `POST /api/v1/device/pair`, polls `GET /api/v1/device/pair/status`, and calls `K12Runtime.markPaired` only when the status is `active`. Pending confirmation does not schedule sync. The parent area shows the server host and can unpair. Invalid or expired codes, network failures, and TLS failures use clear Chinese messages.
+- The admin pair-code panel shows a QR image (`配对二维码`) of `qr_payload` beside the 6-digit code. The payload includes `public_base_url` and `base_url`.
+
+### Changed
+
+- The K12 home screen (title, stage, nickname, remaining minutes, “开始学习”, “家长”) is no longer the landing page. After onboarding, an unpaired tablet shows a pairing-needed state. A paired tablet with no model yet shows a waiting state. Once a server-managed model is applied, or a parent has configured a local provider, the app opens the stock session list so the child can start or continue a chat. Parent PIN settings, pairing, permissions, limits, and model status sit behind the existing gear icon. Remaining screen-time minutes are a chip in the top bar. The screen-time lock and the break banner still apply.
+- Full tablet model config (`GET /api/v1/device/tablet-model`) is fetched once right after pairing or initialization, then at most once per `ModelConfigSchedule.INTERVAL_MS` (24 hours). A newer `tablet_model_version` on the heartbeat fetches immediately and does not wait out the interval. The 15-minute WorkManager job and the foreground one-off still send the heartbeat, apply `config_json`, and upload usage; those runs do not refetch the full model config when the version is unchanged and the interval has not elapsed. A failed pull does not count as success, so the next sync retries. A successful pull of an unchanged version waits the interval. Unpair clears the timestamp.
+- Product SemVer → `1.0.0-rc.3` / `versionCode` `1000009`.
+
+### Security
+
+- The pairing form stays behind the parent PIN. The UI shows the server host, not the full URL. The wrapped code secret is not logged.
+
 ## [1.0.0-rc.2] - 2026-11-03
 
 Parent configures the tablet chat model once in the admin UI. Paired tablets store it in the Android Keystore and apply it through the existing provider settings. Model traffic is not proxied. Upstream Android baseline remains **1.15** (`versionCode` 37). Product SemVer `1.0.0-rc.2` / `versionCode` `1000008` (STAGE 8). ADR-0015 amends ADR-0006.
@@ -177,7 +200,8 @@ Milestone **M0 · Thin shell**. Upstream Android baseline: **1.15** (`versionCod
 
 - Release keystore material stays out of git; CI fails if a keystore is committed.
 
-[Unreleased]: https://github.com/ChuckPeng/OpenMinis-K12/compare/v1.0.0-rc.2...HEAD
+[Unreleased]: https://github.com/ChuckPeng/OpenMinis-K12/compare/v1.0.0-rc.3...HEAD
+[1.0.0-rc.3]: https://github.com/ChuckPeng/OpenMinis-K12/compare/v1.0.0-rc.2...v1.0.0-rc.3
 [1.0.0-rc.2]: https://github.com/ChuckPeng/OpenMinis-K12/compare/v1.0.0-rc.1...v1.0.0-rc.2
 [1.0.0-rc.1]: https://github.com/ChuckPeng/OpenMinis-K12/compare/v1.0.0-m5b...v1.0.0-rc.1
 [1.0.0-m3]: https://github.com/ChuckPeng/OpenMinis-K12/compare/v1.0.0-m2...v1.0.0-m3

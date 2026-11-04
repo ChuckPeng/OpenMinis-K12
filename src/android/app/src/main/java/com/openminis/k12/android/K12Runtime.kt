@@ -3,9 +3,9 @@ package com.openminis.k12.android
 import android.content.Context
 import android.util.Log
 import androidx.compose.runtime.mutableStateOf
-import com.openminis.k12.ColdStart
 import com.openminis.k12.K12State
 import com.openminis.k12.ParentGate
+import com.openminis.k12.StudyEntry
 import com.openminis.k12.PermissionReport
 import com.openminis.k12.PinResult
 import com.openminis.k12.ScreenTime
@@ -30,6 +30,10 @@ object K12Runtime {
     private var prefs: K12Prefs? = null
     private var probe: K12PermissionProbe? = null
 
+    @Volatile
+    var localProviderReady: Boolean = false
+        private set
+
     fun install(context: Context) {
         val app = context.applicationContext
         val store = K12Prefs(app)
@@ -51,7 +55,21 @@ object K12Runtime {
     fun studyLocked(now: Long = System.currentTimeMillis()): Boolean =
         installed && state.profile.onboardingComplete && ScreenTime.limitReached(state, now)
 
-    fun coldStartRoute(): String = ColdStart.route(state.profile.onboardingComplete)
+    fun setLocalProviderReady(ready: Boolean) {
+        localProviderReady = ready
+    }
+
+    fun chatReady(): Boolean = StudyEntry.chatReady(
+        managed = com.openminis.k12.model.K12ModelRuntime.managed(),
+        localReady = localProviderReady,
+    )
+
+    fun coldStartRoute(): String = StudyEntry.destination(
+        onboardingComplete = state.profile.onboardingComplete,
+        paired = state.profile.pairing == "active",
+        chatReady = chatReady(),
+        studyLocked = studyLocked(),
+    )
 
     fun chooseStage(stage: StudyStage) = update { Wizard.chooseStage(it, stage) }
 
@@ -60,6 +78,8 @@ object K12Runtime {
     fun setNickname(raw: String) = update { Wizard.setNickname(it, raw) }
 
     fun openSecrets() = update { Wizard.openSecrets(it) }
+
+    fun openPairing() = update { Wizard.openPairing(it) }
 
     fun submitSecrets(pin: String, pinAgain: String, backup: String, backupAgain: String): SecretSubmit {
         val result = Wizard.submitSecrets(state, pin, pinAgain, backup, backupAgain)

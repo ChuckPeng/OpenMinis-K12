@@ -30,10 +30,7 @@ fun k12ProviderSettingsLocked(): Boolean {
 fun K12ManagedModelScreen(onBack: () -> Unit) {
     val tick = K12ModelRuntime.revision.value
     val status = if (tick >= 0) K12ModelRuntime.pageStatus() else K12ModelRuntime.pageStatus()
-    Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
+    K12Page {
         Text(
             stringResource(R.string.k12_model_managed_title),
             style = MaterialTheme.typography.headlineMedium,

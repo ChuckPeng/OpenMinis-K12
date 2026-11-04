@@ -141,9 +141,10 @@ object K12ModelSync {
         upstream: UpstreamModelPort,
         fetch: () -> ModelFetch,
         log: ModelLog? = null,
+        force: Boolean = false,
     ): SyncOutcome {
         val applied = store.load()?.version ?: 0L
-        if (announcedVersion == applied) return SyncOutcome.Unchanged
+        if (!force && announcedVersion == applied) return SyncOutcome.Unchanged
         return when (val fetched = fetch()) {
             is ModelFetch.Denied -> SyncOutcome.Denied(fetched.code)
             is ModelFetch.Failed -> SyncOutcome.Failed

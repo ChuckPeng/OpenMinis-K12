@@ -5,11 +5,12 @@ package com.openminis.k12
  * Formula and tag rules: `docs/k12/conventions.md`.
  *
  * versionCode = MAJOR×1_000_000 + MINOR×1_000 + PATCH×10 + STAGE
- * STAGE 1–6 = v1 milestones m0…m5b; 7 = 1.0.0-rc.1; 8 = 1.0.0-rc.2; 9 = GA.
+ * STAGE 1–6 = v1 milestones m0…m5b; 7 = 1.0.0-rc.1; 8 = 1.0.0-rc.2; 9 = 1.0.0-rc.3.
+ * The single-digit STAGE slot is full, so GA `1.0.0` uses versionCode 1000010.
  */
 object Version {
-    const val NAME = "1.0.0-rc.2"
-    const val CODE = 1_000_008
+    const val NAME = "1.0.0-rc.3"
+    const val CODE = 1_000_009
 
     /** Upstream OpenMinis Android baseline recorded at this milestone. */
     const val UPSTREAM_VERSION_NAME = "1.15"
@@ -25,13 +26,13 @@ object Version {
     const val DEVICE_API_MIN = 1
 
     /** Git tag to apply after this PR merges. */
-    const val MILESTONE_TAG = "v1.0.0-rc.2"
+    const val MILESTONE_TAG = "v1.0.0-rc.3"
 
     fun matchesCodeFormula(): Boolean {
         val major = 1
         val minor = 0
         val patch = 0
-        val stage = 8 // 1.0.0-rc.2
+        val stage = 9 // 1.0.0-rc.3
         return CODE == major * 1_000_000 + minor * 1_000 + patch * 10 + stage
     }
 }

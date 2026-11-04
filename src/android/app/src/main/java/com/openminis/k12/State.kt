@@ -24,7 +24,7 @@ data class Profile(
     fun hasPin(): Boolean = !pinSalt.isNullOrBlank() && !pinHash.isNullOrBlank()
 }
 
-enum class OnboardingStep { STAGE, IDENTITY, SECRETS, PERMISSIONS, DONE }
+enum class OnboardingStep { STAGE, IDENTITY, SECRETS, PERMISSIONS, PAIRING, DONE }
 
 data class UsageLedger(
     val dayKey: String = "",

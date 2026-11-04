@@ -93,6 +93,22 @@ button.ghost {
   font-size: 0.85rem;
   word-break: break-all;
 }
+.pair-result {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  margin-top: 0.85rem;
+}
+.pair-result img {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.pair-result pre {
+  margin: 0;
+  flex: 1 1 240px;
+}
 .err {
   color: #9b1c1c;
 }

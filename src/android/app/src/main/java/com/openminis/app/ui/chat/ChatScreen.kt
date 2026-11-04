@@ -3385,6 +3385,7 @@ fun ChatScreen(
                     }
                 },
                 actions = {
+                    com.openminis.k12.ui.K12ScreenTimeChip()
                     // iOS: "..." circle button → dropdown menu
                     Box {
                         IconButton(onClick = { showChatMenu = true }) {

@@ -62,6 +62,7 @@ jobs:
             --tests com.openminis.k12.K12CasMainThreadTest \
             --tests com.openminis.k12.K12ModelConfigAcceptanceTest \
             --tests com.openminis.k12.K12SyncScheduleAcceptanceTest \
+            --tests com.openminis.k12.K12PairingAcceptanceTest \
             --tests com.openminis.app.KeepScreenOnOrientationTest \
             --tests com.openminis.app.agent.shell.BashismDetectorTest \
             --stacktrace

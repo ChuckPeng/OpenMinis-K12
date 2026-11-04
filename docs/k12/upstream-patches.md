@@ -100,4 +100,16 @@
 | H-14 | `AppNavigation.kt` | `PROVIDER_LIST`、`ADD_PROVIDER`、`PROVIDER_DETAIL` | 服务器配置生效时改为只读说明，不进入可编辑表单 | WP-B-9 |
 | H-06 | `ShareReceiverActivity.kt` | 供应商 JSON 导入 | 服务器托管时不导入另一份供应商 | WP-B-9 |
 
+## 1.0.0-rc.3 深色模式、配对入口与聊天落地
+
+K12 逻辑仍在 `com.openminis.k12`。上游文件只加内容色、空状态分支和齿轮入口。
+
+| ID | 文件 | 符号 | 原因 | 验收 |
+| --- | --- | --- | --- | --- |
+| H-04 | `ui/theme/Theme.kt` | `MinisTheme`、`MinisAppearance` 的 `LocalContentColor` | 系统深色模式下正文使用 `onBackground`，避免黑字落在黑色背景上 | `K12PairingAcceptanceTest` |
+| H-04 | `AppNavigation.kt` | `startDestination`、`StudyEntry` 路由 | 冷启动进入配对、等待模型、锁屏或会话列表；向导结束后不再进入已删除的儿童主页 | WP-M0-2 |
+| H-04 | `SessionListScreen.kt` | 空列表、`K12ScreenTimeChip`、`onK12Pair` | 未就绪时显示配对或等待；就绪后显示可新建会话的空状态和剩余分钟 | `K12PairingAcceptanceTest` |
+| H-04 | `ChatScreen.kt` | 顶栏 `K12ScreenTimeChip` | 剩余分钟留在顶栏，不另开主页 | 屏幕时长 |
+| H-13 | `ChatSplitScaffold.kt` | 齿轮 `onSettingsClick` | K12 已安装时齿轮进入家长 PIN，而不是上游设置 | 家长入口 |
+
 公开树没有 `provider-customization.properties`。依赖那份私有提示词的上游快照测试在本仓库跑不起来，CI 不把它们算进 M0 门槛。

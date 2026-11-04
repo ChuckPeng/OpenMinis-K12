@@ -2,6 +2,7 @@ package com.openminis.app.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
@@ -167,7 +168,11 @@ fun MinisTheme(
         shapes = MinisShapes,
         typography = typography,
     ) {
-        CompositionLocalProvider(LocalChatPalette provides chatPalette, content = content)
+        CompositionLocalProvider(
+            LocalChatPalette provides chatPalette,
+            LocalContentColor provides colorScheme.onBackground,
+            content = content,
+        )
     }
 }
 
@@ -186,6 +191,7 @@ fun MinisAppearance(darkTheme: Boolean, content: @Composable () -> Unit) {
     ) {
         CompositionLocalProvider(
             LocalChatPalette provides if (darkTheme) DarkChatPalette else LightChatPalette,
+            LocalContentColor provides if (darkTheme) DarkColorScheme.onBackground else LightColorScheme.onBackground,
             content = content,
         )
     }

@@ -48,6 +48,8 @@ object K12SyncRuntime {
         }
     }
 
+    fun currentEndpoint(): com.openminis.k12.device.PairedEndpoint? = prefs?.loadEndpoint()
+
     fun onForeground() {
         controller.onForeground()
     }
@@ -132,12 +134,17 @@ object K12SyncRuntime {
             config = sink,
             events = store.events,
             diagnostics = store.diagnostics,
-            onModelVersion = { version, fetch -> K12ModelRuntime.noteHeartbeatVersion(version, fetch) },
+            onModelVersion = { version, force, fetch ->
+                K12ModelRuntime.noteHeartbeatVersion(version, fetch, force = force)
+            },
             appVersion = com.openminis.k12.Version.NAME,
             deviceId = endpoint.deviceId,
             childId = endpoint.childId,
             dailyUsedMinutes = usedMinutes,
             permission = permission,
+            modelAppliedVersion = { com.openminis.k12.model.K12ModelRuntime.pageStatus().version },
+            initialModelFetchAtMs = store.lastModelFetchAt(),
+            onModelFetched = { at -> store.setLastModelFetchAt(at) },
         )
         return cycle.run()
     }

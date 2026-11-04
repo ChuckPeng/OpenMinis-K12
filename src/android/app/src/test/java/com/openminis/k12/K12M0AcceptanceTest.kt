@@ -68,8 +68,13 @@ class K12M0AcceptanceTest {
     @Test
     fun wpM0_2_coldStartIsChildHomeAfterOnboarding() {
         assertEquals(ColdStart.ONBOARDING, ColdStart.route(onboardingComplete = false))
-        assertEquals(ColdStart.HOME, ColdStart.route(onboardingComplete = true))
-        assertNotEquals("sessions", ColdStart.route(true))
+        assertEquals(StudyEntry.NEED_PAIRING, ColdStart.route(onboardingComplete = true))
+        assertEquals(StudyEntry.NEED_PAIRING, StudyEntry.destination(true, paired = false, chatReady = false, studyLocked = false))
+        assertEquals(StudyEntry.WAITING, StudyEntry.destination(true, paired = true, chatReady = false, studyLocked = false))
+        assertEquals(StudyEntry.SESSIONS, StudyEntry.destination(true, paired = true, chatReady = true, studyLocked = false))
+        assertEquals(StudyEntry.SESSIONS, StudyEntry.destination(true, paired = false, chatReady = true, studyLocked = false))
+        assertEquals(StudyEntry.LOCKED, StudyEntry.destination(true, paired = true, chatReady = true, studyLocked = true))
+        assertNotEquals(StudyEntry.SESSIONS, StudyEntry.destination(true, false, false, false))
     }
 
     @Test
@@ -103,7 +108,11 @@ class K12M0AcceptanceTest {
         assertTrue(BypassActivityPolicy.blocked("com.openminis.app.webapp.WebAppActivity", true))
         assertTrue(BypassActivityPolicy.blocked("com.openminis.app.auth.OAuthRedirectActivity", true))
         assertFalse(BypassActivityPolicy.blocked("com.openminis.app.MainActivity", true))
-        assertFalse(RoutePolicy.blocked(ColdStart.HOME, true, false, true))
+        assertFalse(RoutePolicy.blocked(StudyEntry.NEED_PAIRING, true, false, true, chatReady = false, paired = false))
+        assertTrue(RoutePolicy.blocked(StudyEntry.SESSIONS, true, false, false, chatReady = false, paired = false))
+        assertTrue(RoutePolicy.blocked(StudyEntry.SESSIONS, true, false, true, chatReady = true, paired = true))
+        assertFalse(RoutePolicy.blocked(StudyEntry.LOCKED, true, false, true, chatReady = true, paired = true))
+        assertFalse(RoutePolicy.blocked(StudyEntry.SESSIONS, true, false, false, chatReady = true, paired = true))
     }
 
     @Test
