@@ -104,7 +104,7 @@ flowchart TB
 | --- | --- |
 | corpid、应用 Secret、Token、EncodingAESKey、钉钉令牌、服务端小模型 Key | 只在服务端，主密钥 AES-256-GCM。主密钥来自环境变量或 `/data/master.key`（权限 600），不进备份文件本体。这个 Key 不下发平板 |
 | 服务端 Ed25519 签名私钥 | 只在服务端；公钥配对时写入平板 |
-| 设备私钥、`codeSecret`、TOTP、家长 PIN 哈希 | 平板。设备私钥是 Ed25519：硬件 Keystore 能用时放在里面，否则 32 字节种子用 Keystore 的 AES-256-GCM 加密后放在应用私有目录。`codeSecret` 与 TOTP 仍在 Keystore 加密存储。PIN 只存加盐哈希 |
+| 设备私钥、`codeSecret`、TOTP、家长 PIN 哈希 | 平板。设备私钥是 Ed25519：硬件 Keystore 能用时放在里面，否则 32 字节种子用 Keystore 的 AES-256-GCM 加密后放在应用私有目录（IV 由 Keystore 生成）。`codeSecret` 与 TOTP 仍在 Keystore 加密存储。PIN 只存加盐哈希 |
 | 讲题模型 API Key | 服务器主密钥加密保存；下发后平板放进 Keystore 加密存储。心跳不带密钥。服务器清除后平板回到原先的本机配置。解绑或重置会删掉已下发的密钥 |
 | 备份口令 | 只在家长手里。服务端只存密文 |
 | 告警片段 | 服务端加密，30 天，仅管理登录后可看。不进企微、不进大模型、设备接口不下发 |

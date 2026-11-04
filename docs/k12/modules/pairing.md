@@ -25,7 +25,7 @@
 
 `POST` 提交配对码、设备公钥（标准 Base64 的 32 字节 Ed25519）、设备标签、`child_id`。返回 `device_id`、状态 `pending_confirm`，以及用该公钥密封的 `codeSecret`（X25519 sealed box）。同一 `child_id` 已有 `active` 平板时，须在网页确认替换。`pending_confirm` 的密钥只能查询配对状态。
 
-设备密钥：签名只用 Ed25519。API 33 及以上先试 Android Keystore 的硬件密钥（`EC` + `ed25519`），自测签名能通过才留下。否则在软件里生成 32 字节种子，用 Keystore 中不可导出的 AES-256-GCM 密钥加密后放在应用私有目录。rc.3 留下的 P-256 别名在下次配对前删掉并重新生成。解绑或重置会删掉两个 Keystore 项和密文。不记录密钥。
+设备密钥：签名只用 Ed25519。API 33 及以上先试 Android Keystore 的硬件密钥（`EC` + `ed25519`），自测签名能通过才留下。否则在软件里生成 32 字节种子，用 Keystore 中不可导出的 AES-256-GCM 密钥加密后放在应用私有目录。加密时由 Keystore 自己生成 GCM IV，调用方不传入；默认策略会拒绝调用方提供的 IV。解密才使用密文里保存的那 12 字节。rc.3 留下的 P-256 别名在下次配对前删掉并重新生成。解绑或重置会删掉两个 Keystore 项和密文。失败时 logcat 记下异常类名和消息，不记密钥字节。生产配对地址仍必须是 https；只有 debug 仪器测试可以打开明文 http。
 
 ## 数据
 

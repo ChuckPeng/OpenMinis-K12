@@ -52,8 +52,8 @@ object DeviceSigningKey {
             val opened = loadOrCreate(context.applicationContext)
             cached = opened
             opened
-        } catch (thrown: Exception) {
-            Log.w(TAG, "device key generation failed: ${thrown.javaClass.name}")
+        } catch (thrown: Throwable) {
+            Log.w(TAG, "device key generation failed: ${failureDetail(thrown)}")
             null
         }
     }
@@ -85,8 +85,8 @@ object DeviceSigningKey {
                 seed.fill(0)
                 dropNonEd25519Alias()
                 return opened
-            } catch (thrown: Exception) {
-                Log.w(TAG, "device key unwrap failed: ${thrown.javaClass.name}")
+            } catch (thrown: Throwable) {
+                Log.w(TAG, "device key unwrap failed: ${failureDetail(thrown)}")
                 file.delete()
             }
         }
@@ -111,8 +111,8 @@ object DeviceSigningKey {
         }
         val opened = try {
             openedFromKeystore()
-        } catch (thrown: Exception) {
-            Log.w(TAG, "hardware ed25519 unusable: ${thrown.javaClass.name}")
+        } catch (thrown: Throwable) {
+            Log.w(TAG, "hardware ed25519 unusable: ${failureDetail(thrown)}")
             null
         }
         if (opened != null && selfTest(opened)) return opened
@@ -133,8 +133,8 @@ object DeviceSigningKey {
             )
             generator.generateKeyPair()
             true
-        } catch (thrown: Exception) {
-            Log.w(TAG, "hardware ed25519 unavailable: ${thrown.javaClass.name}")
+        } catch (thrown: Throwable) {
+            Log.w(TAG, "hardware ed25519 unavailable: ${failureDetail(thrown)}")
             deleteAlias(SIGN_ALIAS)
             false
         }
@@ -157,8 +157,8 @@ object DeviceSigningKey {
             val signature = opened.signer.sign(message)
             val publicKey = Base64.getDecoder().decode(opened.publicKeyBase64)
             Ed25519DeviceKey.verify(publicKey, message, signature)
-        } catch (thrown: Exception) {
-            Log.w(TAG, "device key self-test failed: ${thrown.javaClass.name}")
+        } catch (thrown: Throwable) {
+            Log.w(TAG, "device key self-test failed: ${failureDetail(thrown)}")
             false
         }
     }
@@ -199,11 +199,26 @@ object DeviceSigningKey {
         try {
             val store = keyStore()
             if (store.containsAlias(alias)) store.deleteEntry(alias)
-        } catch (thrown: Exception) {
-            Log.w(TAG, "device key delete failed: ${thrown.javaClass.name}")
+        } catch (thrown: Throwable) {
+            Log.w(TAG, "device key delete failed: ${failureDetail(thrown)}")
         }
     }
 
     private fun keyStore(): KeyStore =
         KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+
+    /** Class and message only. Long tokens are redacted so a key cannot land in logcat. */
+    private fun failureDetail(thrown: Throwable): String {
+        val message = thrown.message.orEmpty().replace(KEY_LIKE, "[redacted]")
+        val cause = thrown.cause
+        val tail = if (cause != null && cause !== thrown) {
+            val causeMessage = cause.message.orEmpty().replace(KEY_LIKE, "[redacted]")
+            " caused by ${cause.javaClass.name}: $causeMessage"
+        } else {
+            ""
+        }
+        return "${thrown.javaClass.name}: $message$tail"
+    }
+
+    private val KEY_LIKE = Regex("[A-Za-z0-9+/=_\\-]{24,}")
 }

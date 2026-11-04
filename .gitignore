@@ -168,3 +168,6 @@ deps/aot/.build-iphonesimulator/
 # Server admin UI
 server/web/node_modules/
 *.tsbuildinfo
+
+# Emulator e2e output (logcat, screenshots). CI uploads these as artifacts.
+e2e-artifacts/

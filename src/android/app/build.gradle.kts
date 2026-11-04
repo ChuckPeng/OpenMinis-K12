@@ -48,8 +48,8 @@ android {
         targetSdk = 35
         // K12 SemVer — independent of upstream. See docs/k12/conventions.md
         // and com.openminis.k12.Version. Upstream baseline was 1.15 / 37.
-        versionCode = 1_000_010
-        versionName = "1.0.0-rc.4"
+        versionCode = 1_000_011
+        versionName = "1.0.0-rc.5"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -120,6 +120,12 @@ android {
     buildTypes {
         getByName("debug") {
             buildConfigField("boolean", "DEV_TOOLS", "true")
+            // Instrumented e2e runs on x86_64 emulator images. Release stays
+            // arm64-v8a from defaultConfig; this debug set is the install ABI.
+            ndk {
+                abiFilters.clear()
+                abiFilters += listOf("arm64-v8a", "x86_64")
+            }
         }
         // `perf`: the debug variant minus android:debuggable. ART refuses to
         // AOT-compile a debuggable app (`cmd package compile -m speed`
@@ -588,6 +594,7 @@ dependencies {
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
     androidTestImplementation("junit:junit:4.13.2")
+    androidTestImplementation("androidx.test.uiautomator:uiautomator:2.3.0")
 
     // Tutoring A4 (BLOCK-CAS-1). symja_android_library 3.2.0.
     // matheclipse-core / parser / external are LGPL-3.0 (since 3.1.1) and are

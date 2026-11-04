@@ -135,6 +135,13 @@ class PairingClient(
         const val PAIR_PATH = "/api/v1/device/pair"
         const val STATUS_PATH = "/api/v1/device/pair/status"
 
+        /**
+         * Instrumented tests set this so a debug build can call the runner over
+         * plain http. Release builds ignore it because BuildConfig.DEBUG is false.
+         */
+        @Volatile
+        var allowCleartextForTests: Boolean = false
+
         fun normalizeBaseUrl(raw: String): String? {
             val trimmed = raw.trim().trimEnd('/')
             if (trimmed.isEmpty()) return null
@@ -143,7 +150,10 @@ class PairingClient(
             } catch (_: Exception) {
                 return null
             }
-            if (!uri.scheme.equals("https", ignoreCase = true)) return null
+            val scheme = uri.scheme?.lowercase()
+            val https = scheme == "https"
+            val cleartext = scheme == "http" && allowCleartextForTests && com.openminis.app.BuildConfig.DEBUG
+            if (!https && !cleartext) return null
             if (uri.host.isNullOrBlank()) return null
             if (!uri.userInfo.isNullOrBlank()) return null
             return trimmed
