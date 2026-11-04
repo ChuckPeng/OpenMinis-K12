@@ -8,13 +8,17 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import android.util.Log
 import androidx.core.content.FileProvider
+import androidx.test.espresso.Espresso
 import androidx.test.espresso.intent.Intents
 import androidx.test.espresso.intent.matcher.IntentMatchers
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
+import androidx.test.uiautomator.Direction
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.UiObject2
+import androidx.test.uiautomator.UiScrollable
+import androidx.test.uiautomator.UiSelector
 import androidx.test.uiautomator.Until
 import com.openminis.k12.android.K12PairingRuntime
 import com.openminis.k12.android.K12Runtime
@@ -382,6 +386,7 @@ class K12LearningE2ETest {
         val focused = device.findObject(By.focused(true))
         if (focused != null && focused.className.contains("Edit")) {
             focused.setText(value)
+            closeKeyboard()
             return
         }
         val edits = device.findObjects(By.clazz("android.widget.EditText"))
@@ -390,6 +395,7 @@ class K12LearningE2ETest {
             ?: die("no edit for $label")
         target.click()
         target.setText(value)
+        closeKeyboard()
     }
 
     private fun chooseStage(label: String) {
@@ -484,13 +490,59 @@ class K12LearningE2ETest {
     private fun waitEdit(timeout: Long): UiObject2? =
         device.wait(Until.findObject(By.clazz("android.widget.EditText")), timeout)
 
+    /**
+     * The CI emulator is 320×640. A form taller than that puts the action
+     * below the fold, and focusing the last field can scroll it off the top.
+     * Swipes stay in the screen padding so a text field does not eat them.
+     */
     private fun swipeUntil(text: String) {
-        repeat(5) {
-            val node = device.findObject(By.text(text))
-            if (node != null && node.visibleBounds.height() > 0) return
-            val h = device.displayHeight
-            device.swipe(device.displayWidth / 2, h * 3 / 4, device.displayWidth / 2, h / 3, 30)
-            device.waitForIdle(500)
+        closeKeyboard()
+        if (onScreen(text)) return
+        runCatching {
+            UiScrollable(UiSelector().scrollable(true)).apply {
+                setAsVerticalList()
+                scrollIntoView(UiSelector().text(text))
+            }
+        }
+        if (onScreen(text)) return
+        repeat(8) {
+            flick(revealLower = true)
+            if (onScreen(text)) return
+        }
+        repeat(8) {
+            flick(revealLower = false)
+            if (onScreen(text)) return
+        }
+    }
+
+    private fun onScreen(text: String): Boolean {
+        val node = device.findObject(By.text(text)) ?: return false
+        val bounds = node.visibleBounds
+        return bounds.height() > 0 && bounds.top >= 0 && bounds.bottom <= device.displayHeight
+    }
+
+    private fun flick(revealLower: Boolean) {
+        val scroller = device.findObject(By.scrollable(true))
+        val bounds = scroller?.visibleBounds
+        val x = (bounds?.left ?: 0) + 8
+        val top = (bounds?.top ?: 0) + 48
+        val bottom = (bounds?.bottom ?: device.displayHeight) - 48
+        if (bottom - top < 80) {
+            scroller?.scroll(if (revealLower) Direction.UP else Direction.DOWN, 0.6f)
+            device.waitForIdle(300)
+            return
+        }
+        if (revealLower) device.swipe(x, bottom, x, top, 40) else device.swipe(x, top, x, bottom, 40)
+        device.waitForIdle(300)
+    }
+
+    private fun closeKeyboard() {
+        runCatching { Espresso.closeSoftKeyboard() }
+        val dump = device.executeShellCommand("dumpsys input_method")
+        val shown = dump.contains("mInputShown=true") || Regex("mImeWindowVis=[1-9]").containsMatchIn(dump)
+        if (shown) {
+            device.pressKeyCode(android.view.KeyEvent.KEYCODE_ESCAPE)
+            device.waitForIdle(400)
         }
     }
 
@@ -503,7 +555,10 @@ class K12LearningE2ETest {
 
     private fun admin(): Admin = Admin(required("adminUrl")).also { it.login(required("adminUser"), required("adminPass")) }
 
-    private fun die(message: String): Nothing = throw AssertionError(message)
+    private fun die(message: String): Nothing {
+        shot("fail")
+        throw AssertionError(message)
+    }
 
     private fun required(name: String): String {
         val value = args.getString(name)?.trim().orEmpty()

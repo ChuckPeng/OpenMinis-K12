@@ -1,6 +1,6 @@
 # 学习功能模拟器验收
 
-GitHub Actions 的 API 30 与 API 34 模拟器跑 `K12DeviceE2ETest` 和 `K12LearningE2ETest`。讲题模型是工作流里的假 OpenAI 服务（固定回复，含 `k12_calc` 工具调用），经管理接口下发。不使用真实密钥。
+GitHub Actions 的 API 30 与 API 34 模拟器跑 `K12DeviceE2ETest` 和 `K12LearningE2ETest`。默认模拟器皮肤是 320×640，会把「下一步」和「绑定」裁到屏幕外，所以作业把显示设成 1080×1920。讲题模型是工作流里的假 OpenAI 服务（固定回复，含 `k12_calc` 工具调用），经管理接口下发。不使用真实密钥。
 
 无头模拟器没有可用相机。拍照题走系统图片选择，测试用 Espresso Intents 交回一张夹具图。企微按钮回调（J12 / J14）不在 CI 里执行，家长页只断言「稍后开放」行可见。真机步骤见 `docs/k12/ops/j12-live-test.md`。
 

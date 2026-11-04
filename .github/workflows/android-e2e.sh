@@ -124,6 +124,13 @@ adb shell 'while [ "$(getprop sys.boot_completed)" != "1" ]; do sleep 1; done'
 adb install -r -t "$APK"
 adb install -r -t "$TEST_APK"
 adb shell cmd uimode night yes || true
+# The default AVD skin is 320x640. The secret and pairing forms are taller
+# than that, so「下一步」and「绑定」never enter the accessibility tree.
+adb shell wm size 1080x1920
+adb shell wm density 240
+sleep 2
+adb shell wm size | tee "$ART/display-api${API_LEVEL}.txt"
+adb shell wm density | tee -a "$ART/display-api${API_LEVEL}.txt"
 
 set +e
 adb shell am instrument -w \
