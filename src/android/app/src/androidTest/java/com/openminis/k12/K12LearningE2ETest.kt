@@ -974,7 +974,8 @@ class K12LearningE2ETest {
                 val found = ArrayList<AccessibilityNodeInfo>()
                 collectExactText(root, text, found)
                 val label = found.firstOrNull { it.packageName?.toString() == context.packageName } ?: continue
-                if (label.performAction(AccessibilityNodeInfo.ACTION_SHOW_ON_SCREEN)) {
+                val show = AccessibilityNodeInfo.AccessibilityAction.ACTION_SHOW_ON_SCREEN.id
+                if (label.performAction(show)) {
                     device.waitForIdle(350)
                     return true
                 }
