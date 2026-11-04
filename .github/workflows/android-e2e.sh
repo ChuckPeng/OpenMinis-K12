@@ -27,15 +27,7 @@ cleanup() {
     wait "$SERVER_PID" >/dev/null 2>&1 || true
   fi
   adb logcat -d > "$ART/logcat-api${API_LEVEL}.txt" || true
-  adb exec-out run-as com.openminis.k12 cat files/k12-onboarding-dark.png > "$ART/onboarding-dark-api${API_LEVEL}.png" || true
-  adb exec-out run-as com.openminis.k12 cat files/k12-e2e.txt > "$ART/k12-e2e-api${API_LEVEL}.txt" || true
-  INDEX="$(adb exec-out run-as com.openminis.k12 cat files/e2e-shots/index.txt 2>/dev/null || true)"
-  if [ -n "$INDEX" ]; then
-    printf '%s\n' "$INDEX" | while IFS= read -r name; do
-      [ -z "$name" ] && continue
-      adb exec-out run-as com.openminis.k12 cat "files/e2e-shots/$name" > "$ART/api${API_LEVEL}-$name" || true
-    done
-  fi
+  pull_app_files || true
   if [ -f "$DATA/server.log" ]; then
     cp "$DATA/server.log" "$ART/server-api${API_LEVEL}.log" || true
   fi
@@ -124,29 +116,57 @@ adb shell 'while [ "$(getprop sys.boot_completed)" != "1" ]; do sleep 1; done'
 adb install -r -t "$APK"
 adb install -r -t "$TEST_APK"
 adb shell cmd uimode night yes || true
-# The default AVD skin is 320x640. The secret and pairing forms are taller
-# than that, so「下一步」and「绑定」never enter the accessibility tree.
-adb shell wm size 1080x1920
-adb shell wm density 240
-sleep 2
 adb shell wm size | tee "$ART/display-api${API_LEVEL}.txt"
 adb shell wm density | tee -a "$ART/display-api${API_LEVEL}.txt"
 
-set +e
-adb shell am instrument -w \
-  -e baseUrl "http://10.0.2.2:$PORT" \
-  -e adminUrl "http://10.0.2.2:$ADMIN_PORT" \
-  -e adminUser "$ADMIN_USER" \
-  -e adminPass "$ADMIN_PASS" \
-  -e pairCode "$PAIR_CODE" \
-  -e modelUrl "http://10.0.2.2:$MODEL_PORT/v1" \
-  -e class 'com.openminis.k12.K12DeviceE2ETest,com.openminis.k12.K12LearningE2ETest' \
-  com.openminis.k12.test/androidx.test.runner.AndroidJUnitRunner \
-  | tee "$ART/instrument-api${API_LEVEL}.txt"
-status=${PIPESTATUS[0]}
-set -e
-if ! grep -Eq 'OK \([0-9]+ tests?\)' "$ART/instrument-api${API_LEVEL}.txt"; then
-  echo "instrumented test failed"
-  exit 1
-fi
-exit "$status"
+# Each test gets a new app process and empty data. pm clear would wipe the
+# previous test's screenshots, so those are copied out before the next clear.
+# The device test runs first: it publishes the placeholder model, and the
+# learning tests replace it.
+pull_app_files() {
+  adb exec-out run-as com.openminis.k12 cat files/k12-onboarding-dark.png > "$ART/onboarding-dark-api${API_LEVEL}.png" || true
+  adb exec-out run-as com.openminis.k12 cat files/k12-e2e.txt > "$ART/k12-e2e-api${API_LEVEL}.txt" || true
+  INDEX="$(adb exec-out run-as com.openminis.k12 cat files/e2e-shots/index.txt 2>/dev/null || true)"
+  if [ -n "$INDEX" ]; then
+    printf '%s\n' "$INDEX" | while IFS= read -r name; do
+      [ -z "$name" ] && continue
+      adb exec-out run-as com.openminis.k12 cat "files/e2e-shots/$name" > "$ART/api${API_LEVEL}-$name" || true
+    done
+  fi
+}
+
+run_one() {
+  local name="$1"
+  local class="$2"
+  adb shell pm clear com.openminis.k12 || true
+  set +e
+  adb shell am instrument -w \
+    -e baseUrl "http://10.0.2.2:$PORT" \
+    -e adminUrl "http://10.0.2.2:$ADMIN_PORT" \
+    -e adminUser "$ADMIN_USER" \
+    -e adminPass "$ADMIN_PASS" \
+    -e pairCode "$PAIR_CODE" \
+    -e modelUrl "http://10.0.2.2:$MODEL_PORT/v1" \
+    -e class "$class" \
+    com.openminis.k12.test/androidx.test.runner.AndroidJUnitRunner \
+    | tee "$ART/instrument-api${API_LEVEL}-$name.txt"
+  local status=${PIPESTATUS[0]}
+  set -e
+  cat "$ART/instrument-api${API_LEVEL}-$name.txt" >> "$ART/instrument-api${API_LEVEL}.txt"
+  rm -f "$ART/api${API_LEVEL}-fail.png"
+  pull_app_files
+  if [ -f "$ART/api${API_LEVEL}-fail.png" ]; then
+    cp "$ART/api${API_LEVEL}-fail.png" "$ART/api${API_LEVEL}-$name-fail.png"
+  fi
+  if ! grep -Eq 'OK \(1 test\)' "$ART/instrument-api${API_LEVEL}-$name.txt"; then
+    echo "instrumented test failed: $name (status $status)"
+    return 1
+  fi
+}
+
+: > "$ART/instrument-api${API_LEVEL}.txt"
+failed=0
+run_one device com.openminis.k12.K12DeviceE2ETest || failed=1
+run_one learning 'com.openminis.k12.K12LearningE2ETest#learningJourney' || failed=1
+run_one pending 'com.openminis.k12.K12LearningE2ETest#pendingPairingActivatesAfterRestart' || failed=1
+exit "$failed"

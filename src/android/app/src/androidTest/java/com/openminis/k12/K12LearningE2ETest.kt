@@ -17,8 +17,6 @@ import androidx.test.uiautomator.By
 import androidx.test.uiautomator.Direction
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.UiObject2
-import androidx.test.uiautomator.UiScrollable
-import androidx.test.uiautomator.UiSelector
 import androidx.test.uiautomator.Until
 import com.openminis.k12.android.K12PairingRuntime
 import com.openminis.k12.android.K12Runtime
@@ -91,8 +89,7 @@ class K12LearningE2ETest {
         assertTrue(deviceId.isNotBlank())
         admin.approve(deviceId)
         admin.putTabletModel(required("modelUrl"))
-        val landed = waitAny(listOf(EMPTY_CHAT, WAIT_MODEL, PAIRED), 60_000)
-        assertNotNull("tablet did not leave the waiting form on its own", landed)
+        awaitAppliedModel(required("modelUrl"))
         assertEquals("active", K12Runtime.snapshot().profile.pairing)
         assertModelApplied(required("modelUrl"))
         val row = admin.deviceRow(deviceId)
@@ -353,6 +350,33 @@ class K12LearningE2ETest {
         device.waitForIdle(1_500)
     }
 
+    /**
+     * Activation navigates as soon as pairing is active. The model document
+     * arrives on the sync that activation already started, so wait until that
+     * cycle has stored this URL and the waiting form is gone.
+     */
+    private fun awaitAppliedModel(modelUrl: String) {
+        val deadline = System.currentTimeMillis() + 90_000
+        var last = "none"
+        while (System.currentTimeMillis() < deadline) {
+            val sync = K12SyncRuntime.runOnce()
+            last = sync::class.java.simpleName
+            if (sync is com.openminis.k12.device.SyncRunResult.Stop) fail("sync did not apply: $sync")
+            val status = K12ModelRuntime.pageStatus()
+            val leftWaiting = device.findObject(By.text(EMPTY_CHAT)) ?: device.findObject(By.text(PAIRED))
+            if (sync is com.openminis.k12.device.SyncRunResult.Ok &&
+                status.managed &&
+                status.baseUrl == modelUrl &&
+                K12Runtime.snapshot().profile.pairing == "active" &&
+                leftWaiting != null
+            ) {
+                return
+            }
+            Thread.sleep(500)
+        }
+        die("tablet did not leave the waiting form on its own ($last)")
+    }
+
     private fun assertModelApplied(modelUrl: String) {
         val status = K12ModelRuntime.pageStatus()
         assertTrue(status.managed)
@@ -494,25 +518,27 @@ class K12LearningE2ETest {
      * The CI emulator is 320×640. A form taller than that puts the action
      * below the fold, and focusing the last field can scroll it off the top.
      * Swipes stay in the screen padding so a text field does not eat them.
+     * A center fling is not used: it lands on the fields and moves the
+     * target off screen.
      */
     private fun swipeUntil(text: String) {
+        dismissAnr()
         closeKeyboard()
         if (onScreen(text)) return
-        runCatching {
-            UiScrollable(UiSelector().scrollable(true)).apply {
-                setAsVerticalList()
-                scrollIntoView(UiSelector().text(text))
-            }
-        }
-        if (onScreen(text)) return
-        repeat(8) {
+        repeat(10) {
             flick(revealLower = true)
             if (onScreen(text)) return
         }
-        repeat(8) {
+        repeat(10) {
             flick(revealLower = false)
             if (onScreen(text)) return
         }
+    }
+
+    private fun dismissAnr() {
+        val close = device.findObject(By.text("Close app")) ?: return
+        close.click()
+        device.waitForIdle(400)
     }
 
     private fun onScreen(text: String): Boolean {
@@ -528,11 +554,12 @@ class K12LearningE2ETest {
         val top = (bounds?.top ?: 0) + 48
         val bottom = (bounds?.bottom ?: device.displayHeight) - 48
         if (bottom - top < 80) {
-            scroller?.scroll(if (revealLower) Direction.UP else Direction.DOWN, 0.6f)
+            scroller?.scroll(if (revealLower) Direction.UP else Direction.DOWN, 0.4f)
             device.waitForIdle(300)
             return
         }
-        if (revealLower) device.swipe(x, bottom, x, top, 40) else device.swipe(x, top, x, bottom, 40)
+        val travel = ((bottom - top) * 0.45f).toInt().coerceAtLeast(80)
+        if (revealLower) device.swipe(x, top + travel, x, top, 30) else device.swipe(x, top, x, top + travel, 30)
         device.waitForIdle(300)
     }
 

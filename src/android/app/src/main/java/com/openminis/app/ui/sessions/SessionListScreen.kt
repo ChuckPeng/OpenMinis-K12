@@ -162,6 +162,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalContext
@@ -1559,9 +1560,14 @@ fun SessionListScreen(
                     onDelete = { showBulkDeleteDialog = true },
                     modifier = Modifier.align(Alignment.BottomCenter),
                 )
-            } else if (hasProviders && (sessions.isNotEmpty() || isSearchActive)) {
+            } else if (
+                hasProviders && (sessions.isNotEmpty() || isSearchActive) ||
+                (com.openminis.k12.android.K12Runtime.installed && com.openminis.k12.android.K12Runtime.chatReady())
+            ) {
                 // Dual FAB row (matching iOS: New Chat left + Search right, or vice versa).
                 // Hidden while the onboarding landing is showing — Step 3 provides the CTA.
+                // The K12 empty line says to use the button below, including when
+                // there are still no sessions.
                 // T46: stay visible while search is active even when the result
                 // set is empty, so the user can edit / clear the query without
                 // having to rediscover the search FAB after a 0-hit query.
@@ -1896,6 +1902,7 @@ private fun DualFabRow(
                 containerColor = minisFabColor(),
                 modifier = Modifier
                     .size(56.dp)
+                    .semantics { contentDescription = "New Chat" }
                     // [T-newchat-fab-shadow] The shadow goes FIRST, outside the clip
                     // below: a shadow drawn after `.clip(CircleShape)` (and the FAB's
                     // own elevation shadow, drawn inside the Surface) falls outside

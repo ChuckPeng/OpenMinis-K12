@@ -61,8 +61,8 @@ class K12DeviceE2ETest {
         val adminPass = required("adminPass")
         val pairCode = required("pairCode")
         assertTrue("K12 runtime did not install", K12Runtime.installed)
+        isolate()
 
-        DeviceSigningKey.delete(context)
         val opened = DeviceSigningKey.open(context)
         if (opened == null) {
             fail("DeviceSigningKey.open returned null on sdk=${android.os.Build.VERSION.SDK_INT}")
@@ -95,6 +95,16 @@ class K12DeviceE2ETest {
         if (sync !is SyncRunResult.Ok) fail("sync did not apply: $sync")
         assertModelApplied()
         captureDarkOnboarding()
+    }
+
+    private fun isolate() {
+        runCatching { K12PairingRuntime.unpair() }
+        context.getSharedPreferences("k12_profile", android.content.Context.MODE_PRIVATE).edit().clear().commit()
+        context.getSharedPreferences("k12_sync", android.content.Context.MODE_PRIVATE).edit().clear().commit()
+        K12ModelRuntime.onUnpairOrReset()
+        K12Runtime.install(context)
+        K12SyncRuntime.install(context)
+        DeviceSigningKey.delete(context)
     }
 
     private fun deliverModel(adminUrl: String, user: String, pass: String, deviceId: String) {

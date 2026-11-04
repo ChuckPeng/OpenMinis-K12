@@ -71,7 +71,7 @@ jobs:
           target: google_apis
           disable-animations: true
           ram-size: 3072
-          emulator-options: -no-window -no-audio -no-snapshot -gpu swiftshader_indirect -no-boot-anim -no-metrics -skin 1080x1920
+          emulator-options: -no-window -no-audio -no-snapshot -gpu swiftshader_indirect -no-boot-anim -no-metrics
           script: bash .github/workflows/android-e2e.sh
         env:
           K12_SERVER_BIN: ${{ runner.temp }}/k12-e2e/openminis-k12-server
