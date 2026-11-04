@@ -1,6 +1,9 @@
 package com.openminis.app.ui.components
 
+import android.provider.Settings
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -32,6 +35,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
@@ -156,14 +160,29 @@ fun MinisMenu(
             } else {
                 androidx.compose.ui.graphics.TransformOrigin(0f, 0f)
             }
+            // Duration scale 0 keeps a scale/fade at its first frame, so the
+            // menu stays transparent. None puts the items on screen at once.
+            val settle = Settings.Global.getFloat(
+                LocalContext.current.contentResolver,
+                Settings.Global.ANIMATOR_DURATION_SCALE,
+                1f,
+            ) == 0f
             AnimatedVisibility(
                 visibleState = visibleState,
-                enter = scaleIn(
-                    animationSpec = tween(200),
-                    initialScale = 0.85f,
-                    transformOrigin = origin,
-                ) + fadeIn(animationSpec = tween(200)),
-                exit = scaleOut(animationSpec = tween(120)) + fadeOut(animationSpec = tween(120)),
+                enter = if (settle) {
+                    EnterTransition.None
+                } else {
+                    scaleIn(
+                        animationSpec = tween(200),
+                        initialScale = 0.85f,
+                        transformOrigin = origin,
+                    ) + fadeIn(animationSpec = tween(200))
+                },
+                exit = if (settle) {
+                    ExitTransition.None
+                } else {
+                    scaleOut(animationSpec = tween(120)) + fadeOut(animationSpec = tween(120))
+                },
             ) {
                 Surface(
                     // [T-android-minis-menu-width] Size to the CONTENT's intrinsic

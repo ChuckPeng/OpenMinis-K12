@@ -7385,6 +7385,9 @@ fun ChatScreen(
                                 )
                                 DropdownMenuItem(
                                     text = { Text(stringResource(R.string.chat_attach_add_file)) },
+                                    modifier = Modifier
+                                        .semantics { testTagsAsResourceId = true }
+                                        .testTag("k12_attach_file"),
                                     leadingIcon = { Icon(Icons.Default.Description, contentDescription = null) },
                                     onClick = {
                                         showAttachMenu = false

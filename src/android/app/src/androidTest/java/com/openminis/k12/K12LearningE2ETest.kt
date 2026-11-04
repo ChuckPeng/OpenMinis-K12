@@ -19,8 +19,6 @@ import androidx.test.uiautomator.By
 import androidx.test.uiautomator.Direction
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.UiObject2
-import androidx.test.uiautomator.UiScrollable
-import androidx.test.uiautomator.UiSelector
 import androidx.test.uiautomator.Until
 import com.openminis.k12.android.K12PairingRuntime
 import com.openminis.k12.android.K12Runtime
@@ -582,9 +580,21 @@ class K12LearningE2ETest {
             Intents.intending(IntentMatchers.hasAction(action)).respondWith(activityResult)
         }
         clickDesc("Attach")
-        val photos = waitAny(listOf("Choose Photos & Videos", "选择照片和视频"), 8_000)
-        if (photos != null) photos.click() else clickAnyText("Add File", "添加文件")
-        device.waitForIdle(1_500)
+        val deadline = System.currentTimeMillis() + 12_000
+        while (System.currentTimeMillis() < deadline) {
+            if (activateResource("k12_attach_file")) {
+                device.waitForIdle()
+                return
+            }
+            val add = device.findObject(By.text("Add File")) ?: device.findObject(By.text("添加文件"))
+            if (add != null) {
+                clickableOf(add).click()
+                device.waitForIdle()
+                return
+            }
+            device.waitForIdle()
+        }
+        die("attach menu did not open; on screen: ${visibleTexts()}")
     }
 
     /**
@@ -1231,19 +1241,16 @@ class K12LearningE2ETest {
 
     private fun resId(tag: String): String = "${context.packageName}:id/$tag"
 
-    private fun parentColumn(): UiScrollable =
-        UiScrollable(UiSelector().resourceId(resId(TAG_PARENT_COLUMN))).apply { setAsVerticalList() }
-
-    /** Scroll the tagged parent column until this text is inside it. */
+    /** Scroll the parent column until this text is on screen. */
     private fun scrollParentTo(text: String) {
         dismissAnr()
         closeKeyboard()
-        if (broughtOnScreen(text)) return
-        val revealed = runCatching {
-            parentColumn().scrollIntoView(UiSelector().textContains(text))
-        }.getOrDefault(false)
-        device.waitForIdle()
-        if (!revealed && waitContains(text, 3_000) == null) {
+        repeat(14) {
+            if (broughtOnScreen(text)) return
+            if (!scrollParentForward()) break
+            device.waitForIdle()
+        }
+        if (!broughtOnScreen(text) && waitContains(text, 2_000) == null) {
             die("parent column did not reveal $text; on screen: ${visibleTexts()}")
         }
     }
@@ -1252,10 +1259,61 @@ class K12LearningE2ETest {
     private fun clickTagged(tag: String) {
         dismissAnr()
         closeKeyboard()
-        runCatching { parentColumn().scrollIntoView(UiSelector().resourceId(resId(tag))) }
-        device.waitForIdle()
-        if (!activateResource(tag)) die("click missed $tag; on screen: ${visibleTexts()}")
-        device.waitForIdle()
+        repeat(14) {
+            if (activateResource(tag)) {
+                device.waitForIdle()
+                return
+            }
+            if (!scrollParentForward()) break
+            device.waitForIdle()
+        }
+        die("click missed $tag; on screen: ${visibleTexts()}")
+    }
+
+    /** ACTION_SCROLL_FORWARD on the parent column, not on a one-line field. */
+    private fun scrollParentForward(): Boolean {
+        val roots = windowRoots()
+        return try {
+            for (root in roots) {
+                val tagged = root.findAccessibilityNodeInfosByViewId(resId(TAG_PARENT_COLUMN))
+                var node: AccessibilityNodeInfo? = tagged.firstOrNull()
+                var guard = 0
+                while (node != null && guard++ < 8) {
+                    if (node.isScrollable &&
+                        node.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
+                    ) {
+                        return true
+                    }
+                    node = node.parent
+                }
+            }
+            var best: AccessibilityNodeInfo? = null
+            var bestHeight = 0
+            for (root in roots) {
+                val candidate = tallestScrollable(root) ?: continue
+                if (candidate.packageName?.toString() != context.packageName) continue
+                val bounds = Rect()
+                candidate.getBoundsInScreen(bounds)
+                if (bounds.height() > bestHeight && subtreeHasText(candidate, PARENT)) {
+                    best = candidate
+                    bestHeight = bounds.height()
+                }
+            }
+            best?.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD) == true
+        } catch (_: IllegalStateException) {
+            false
+        } finally {
+            roots.forEach { runCatching { it.recycle() } }
+        }
+    }
+
+    private fun subtreeHasText(node: AccessibilityNodeInfo, text: String): Boolean {
+        if (node.text?.toString()?.contains(text) == true) return true
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            if (subtreeHasText(child, text)) return true
+        }
+        return false
     }
 
     private fun activateResource(tag: String): Boolean {

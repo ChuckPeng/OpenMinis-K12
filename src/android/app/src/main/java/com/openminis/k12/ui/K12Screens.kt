@@ -296,8 +296,8 @@ fun K12ParentScreen(
         modifier = Modifier
             .fillMaxSize()
             .semantics { testTagsAsResourceId = true }
-            .verticalScroll(rememberScrollState())
             .testTag("k12_parent_column")
+            .verticalScroll(rememberScrollState())
             .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
