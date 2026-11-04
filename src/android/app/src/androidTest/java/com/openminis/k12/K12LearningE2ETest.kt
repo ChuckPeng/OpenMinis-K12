@@ -189,7 +189,9 @@ class K12LearningE2ETest {
         swipeUntil(LATER_UNLOCK)
         shot("13-parent")
         clickText(PERM_TITLE)
-        waitText(PERM_TITLE, 10_000)
+        if (waitText(PERM_REFRESH, 10_000) == null) {
+            die("permissions screen did not open; on screen: ${visibleTexts()}")
+        }
         shot("12-permissions")
         device.pressBack()
         waitText(PARENT, 10_000)
@@ -311,13 +313,20 @@ class K12LearningE2ETest {
     }
 
     private fun sendChat(text: String) {
-        val edit = waitEdit(20_000)
-        if (edit == null) die("chat field missing; on screen: ${visibleTexts()}")
-        edit.click()
-        edit.setText(text)
-        val shown = edit.text?.toString().orEmpty()
-        if (!shown.contains(text.take(2))) {
+        var edit = waitEdit(20_000) ?: die("chat field missing; on screen: ${visibleTexts()}")
+        val typed = runCatching {
             edit.click()
+            edit.setText(text)
+            edit.text?.toString().orEmpty()
+        }.getOrElse {
+            edit = waitEdit(5_000) ?: die("chat field missing; on screen: ${visibleTexts()}")
+            runCatching { edit.click() }
+            runCatching { edit.setText(text) }
+            runCatching { edit.text?.toString() }.getOrNull().orEmpty()
+        }
+        if (!typed.contains(text.take(2))) {
+            val again = waitEdit(5_000) ?: die("chat field missing; on screen: ${visibleTexts()}")
+            runCatching { again.click() }
             InstrumentationRegistry.getInstrumentation().sendStringSync(text)
         }
         clickDesc("Send")
@@ -386,23 +395,47 @@ class K12LearningE2ETest {
     private fun awaitAppliedModel(modelUrl: String) {
         val deadline = System.currentTimeMillis() + 90_000
         var last = "none"
+        var status = K12ModelRuntime.pageStatus()
         while (System.currentTimeMillis() < deadline) {
             val sync = K12SyncRuntime.runOnce()
             last = sync::class.java.simpleName
             if (sync is com.openminis.k12.device.SyncRunResult.Stop) fail("sync did not apply: $sync")
-            val status = K12ModelRuntime.pageStatus()
-            val leftWaiting = device.findObject(By.text(EMPTY_CHAT)) ?: device.findObject(By.text(PAIRED))
-            if (sync is com.openminis.k12.device.SyncRunResult.Ok &&
+            status = K12ModelRuntime.pageStatus()
+            val ready = sync is com.openminis.k12.device.SyncRunResult.Ok &&
                 status.managed &&
                 status.baseUrl == modelUrl &&
-                K12Runtime.snapshot().profile.pairing == "active" &&
-                leftWaiting != null
-            ) {
-                return
-            }
+                K12Runtime.snapshot().profile.pairing == "active"
+            // The session list is composed after the sync result returns.
+            if (ready && (chatSurfaceVisible() || waitUntilChatSurface(8_000))) return
             Thread.sleep(500)
         }
-        die("tablet did not leave the waiting form on its own ($last)")
+        if (status.managed &&
+            status.baseUrl == modelUrl &&
+            K12Runtime.snapshot().profile.pairing == "active" &&
+            waitUntilChatSurface(8_000)
+        ) {
+            return
+        }
+        die(
+            "tablet did not leave the waiting form on its own ($last) " +
+                "managed=${status.managed} url=${status.baseUrl} " +
+                "pairing=${K12Runtime.snapshot().profile.pairing} on screen: ${visibleTexts()}",
+        )
+    }
+
+    /** Empty chat, the paired line, or New Chat. The waiting form has none of these. */
+    private fun chatSurfaceVisible(): Boolean =
+        runCatching { device.findObject(By.text(EMPTY_CHAT)) }.getOrNull() != null ||
+            runCatching { device.findObject(By.text(PAIRED)) }.getOrNull() != null ||
+            runCatching { device.findObject(By.desc("New Chat")) }.getOrNull() != null
+
+    private fun waitUntilChatSurface(timeout: Long): Boolean {
+        val until = System.currentTimeMillis() + timeout
+        while (System.currentTimeMillis() < until) {
+            if (chatSurfaceVisible()) return true
+            device.waitForIdle(300)
+        }
+        return false
     }
 
     private fun assertModelApplied(modelUrl: String) {
@@ -483,19 +516,20 @@ class K12LearningE2ETest {
         swipeUntil(text)
         val deadline = System.currentTimeMillis() + 8_000
         while (System.currentTimeMillis() < deadline) {
-            if (accessibilityClickText(text)) {
+            val node = runCatching { device.findObject(By.text(text)) }.getOrNull()
+            val bounds = node?.let { runCatching { clickableOf(it).visibleBounds }.getOrNull() }
+            if (bounds != null && bounds.height() > 0 && bounds.width() > 0) {
+                device.click(bounds.centerX(), bounds.centerY())
                 device.waitForIdle(500)
                 return
             }
-            val node = runCatching { device.findObject(By.text(text)) }.getOrNull()
-            if (node != null && visible(node)) {
-                runCatching { clickableOf(node).click() }
+            if (accessibilityClickText(text)) {
                 device.waitForIdle(500)
                 return
             }
             device.waitForIdle(200)
         }
-        die("not visible: $text")
+        die("not visible: $text; on screen: ${visibleTexts()}")
     }
 
     private fun clickDescAny(vararg descs: String) {
@@ -727,21 +761,29 @@ class K12LearningE2ETest {
 
     private fun flick(revealLower: Boolean) {
         // A finger swipe from the left edge is the system back gesture, which
-        // leaves the parent screen. Scroll through the accessibility action.
+        // leaves the parent screen. An accessibility scroll that reports
+        // success without moving the parent column (a single-line field is
+        // also scrollable) must not hide the real swipe.
+        val before = runCatching { visibleTexts() }.getOrDefault("")
         if (accessibilityScroll(revealLower)) {
-            device.waitForIdle(300)
-            return
+            device.waitForIdle(250)
+            if (visibleTexts() != before) return
         }
-        val scroller = device.findObject(By.scrollable(true))
-        val bounds = scroller?.visibleBounds
+        val scroller = runCatching {
+            device.findObjects(By.scrollable(true)).maxByOrNull { node ->
+                runCatching { node.visibleBounds.height() }.getOrDefault(0)
+            }
+        }.getOrNull()
+        val moved = runCatching {
+            scroller?.scroll(if (revealLower) Direction.UP else Direction.DOWN, 0.55f) == true
+        }.getOrDefault(false)
+        device.waitForIdle(250)
+        if (moved && visibleTexts() != before) return
+        val bounds = runCatching { scroller?.visibleBounds }.getOrNull()
         val x = (bounds?.centerX() ?: (device.displayWidth / 2)).coerceIn(72, device.displayWidth - 24)
         val top = (bounds?.top ?: 0) + 48
         val bottom = (bounds?.bottom ?: device.displayHeight) - 48
-        if (bottom - top < 80) {
-            scroller?.scroll(if (revealLower) Direction.UP else Direction.DOWN, 0.4f)
-            device.waitForIdle(300)
-            return
-        }
+        if (bottom - top < 80) return
         val travel = ((bottom - top) * 0.45f).toInt().coerceAtLeast(80)
         if (revealLower) device.swipe(x, top + travel, x, top, 30) else device.swipe(x, top, x, top + travel, 30)
         device.waitForIdle(300)
@@ -928,6 +970,7 @@ class K12LearningE2ETest {
         private const val REVIEW = "待复习"
         private const val LINKED = "错题已关联知识点"
         private const val PERM_TITLE = "权限自检"
+        private const val PERM_REFRESH = "重新检查"
         private const val LATER_UNLOCK = "解锁兜底"
         private const val PARENT = "家长"
         private const val PIN_TITLE = "家长 PIN"
