@@ -841,10 +841,16 @@ class K12LearningE2ETest {
         }
     }
 
-    private fun visibleTexts(): String {
+    /** Texts in this app. Leaves out the status bar, whose clock changes every minute. */
+    private fun appTexts(): String = collectTexts(appOnly = true)
+
+    private fun visibleTexts(): String = collectTexts(appOnly = false)
+
+    private fun collectTexts(appOnly: Boolean): String {
         val roots = windowRoots()
         val texts = ArrayList<String>()
         fun walk(node: AccessibilityNodeInfo) {
+            if (appOnly && node.packageName?.toString() != context.packageName) return
             val text = node.text?.toString()
             val desc = node.contentDescription?.toString()
             if (!text.isNullOrBlank()) texts.add(text) else if (!desc.isNullOrBlank()) texts.add("[$desc]")
@@ -857,7 +863,7 @@ class K12LearningE2ETest {
             roots.forEach { walk(it) }
             texts.filterNot { com.openminis.k12.safety.ContentSafetyGuide.isCrisis(it) }
                 .distinct()
-                .take(16)
+                .take(if (appOnly) 40 else 16)
                 .joinToString(" | ")
         } finally {
             roots.forEach { runCatching { it.recycle() } }
@@ -972,10 +978,13 @@ class K12LearningE2ETest {
         // leaves the parent screen. An accessibility scroll that reports
         // success without moving the parent column (a single-line field is
         // also scrollable) must not hide the real swipe.
-        val before = runCatching { visibleTexts() }.getOrDefault("")
+        // App text only. The status-bar clock and other windows change between
+        // reads, and treating that as a scroll skips the swipe that reaches
+        // 锁定并离开.
+        val before = runCatching { appTexts() }.getOrDefault("")
         if (accessibilityScroll(revealLower)) {
             device.waitForIdle(250)
-            if (visibleTexts() != before) return
+            if (appTexts() != before) return
         }
         val scroller = runCatching {
             device.findObjects(By.scrollable(true)).maxByOrNull { node ->
@@ -986,7 +995,7 @@ class K12LearningE2ETest {
             scroller?.scroll(if (revealLower) Direction.UP else Direction.DOWN, 0.55f) == true
         }.getOrDefault(false)
         device.waitForIdle(250)
-        if (moved && visibleTexts() != before) return
+        if (moved && appTexts() != before) return
         val bounds = runCatching { scroller?.visibleBounds }.getOrNull()
         val x = (bounds?.centerX() ?: (device.displayWidth / 2)).coerceIn(72, device.displayWidth - 24)
         val top = (bounds?.top ?: 0) + 48
