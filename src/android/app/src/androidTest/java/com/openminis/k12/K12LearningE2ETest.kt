@@ -7,6 +7,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.util.Log
+import android.view.accessibility.AccessibilityNodeInfo
 import androidx.core.content.FileProvider
 import androidx.test.espresso.Espresso
 import androidx.test.espresso.intent.Intents
@@ -145,7 +146,7 @@ class K12LearningE2ETest {
         val seen = admin.deviceRow(deviceId)
         assertTrue(seen.optString("last_seen").isNotBlank())
 
-        clickDesc("New Chat")
+        openNewChat()
         sendChat("2+2")
         assertNotNull(waitContains(MATH_ANSWER, 120_000))
         shot("08-math")
@@ -155,7 +156,7 @@ class K12LearningE2ETest {
 
         device.pressBack()
         device.waitForIdle(1_000)
-        clickDesc("New Chat")
+        openNewChat()
         sendChat("讲解")
         assertNotNull(waitContains(SOCRATIC, 90_000))
         shot("10-socratic")
@@ -302,21 +303,42 @@ class K12LearningE2ETest {
 
     private fun sendChat(text: String) {
         val edit = waitEdit(20_000)
-        assertNotNull("chat field missing", edit)
-        edit!!.click()
+        if (edit == null) die("chat field missing; on screen: ${visibleTexts()}")
+        edit.click()
         edit.setText(text)
+        val shown = edit.text?.toString().orEmpty()
+        if (!shown.contains(text.take(2))) {
+            edit.click()
+            InstrumentationRegistry.getInstrumentation().sendStringSync(text)
+        }
         clickDesc("Send")
     }
 
     private fun openChatAgain() {
         if (device.findObject(By.desc("Send")) != null) return
-        if (device.findObject(By.desc("New Chat")) != null) {
-            clickDesc("New Chat")
-            return
+        if (device.findObject(By.desc("New Chat")) == null) {
+            device.pressBack()
+            device.waitForIdle(800)
         }
-        device.pressBack()
-        device.waitForIdle(800)
-        clickDesc("New Chat")
+        openNewChat()
+    }
+
+    /** New Chat stays on the list until the detail pane is actually showing the composer. */
+    private fun openNewChat() {
+        val entries = (context.applicationContext as com.openminis.app.MinisApp)
+            .providerRepository.allVisibleEntries().size
+        Log.i("K12E2E", "visible model entries=$entries")
+        val deadline = System.currentTimeMillis() + 25_000
+        while (System.currentTimeMillis() < deadline) {
+            if (waitEdit(400) != null) return
+            if (!clickDesc("New Chat", required = false)) {
+                device.waitForIdle(400)
+                continue
+            }
+            if (waitEdit(3_000) != null) return
+            Log.w("K12E2E", "composer still closed; on screen: ${visibleTexts()}")
+        }
+        die("chat field missing; on screen: ${visibleTexts()}; entries=$entries")
     }
 
     private fun attachFixture() {
@@ -477,18 +499,71 @@ class K12LearningE2ETest {
         die("not visible: ${texts.joinToString()}")
     }
 
-    private fun clickDesc(desc: String) {
+    private fun clickDesc(desc: String, required: Boolean = true): Boolean {
         val deadline = System.currentTimeMillis() + 20_000
         while (System.currentTimeMillis() < deadline) {
+            // A gesture click on New Chat is claimed by the button's
+            // drag-to-swap handler, so the accessibility click action is first.
+            if (accessibilityClick(desc)) {
+                device.waitForIdle(700)
+                return true
+            }
             val node = device.findObject(By.desc(desc))
             if (node != null && node.visibleBounds.height() > 0) {
-                clickableOf(node).click()
+                val bounds = clickableOf(node).visibleBounds
+                device.click(bounds.centerX(), bounds.top + bounds.height() / 3)
                 device.waitForIdle(700)
-                return
+                return true
             }
             device.waitForIdle(300)
         }
-        die("missing desc $desc")
+        if (required) die("missing desc $desc")
+        return false
+    }
+
+    private fun accessibilityClick(desc: String): Boolean {
+        val root = InstrumentationRegistry.getInstrumentation().uiAutomation.rootInActiveWindow ?: return false
+        return try {
+            val found = ArrayList<AccessibilityNodeInfo>()
+            collectDesc(root, desc, found)
+            val node = found.firstOrNull { it.isVisibleToUser } ?: return false
+            var current: AccessibilityNodeInfo? = node
+            var guard = 0
+            while (current != null && guard++ < 6 && !current.isClickable) {
+                current = current.parent
+            }
+            (current ?: node).performAction(AccessibilityNodeInfo.ACTION_CLICK)
+        } finally {
+            root.recycle()
+        }
+    }
+
+    private fun collectDesc(node: AccessibilityNodeInfo, desc: String, out: MutableList<AccessibilityNodeInfo>) {
+        if (node.contentDescription?.toString() == desc) out.add(node)
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            collectDesc(child, desc, out)
+        }
+    }
+
+    private fun visibleTexts(): String {
+        val root = InstrumentationRegistry.getInstrumentation().uiAutomation.rootInActiveWindow ?: return ""
+        val texts = ArrayList<String>()
+        fun walk(node: AccessibilityNodeInfo) {
+            val text = node.text?.toString()
+            val desc = node.contentDescription?.toString()
+            if (!text.isNullOrBlank()) texts.add(text) else if (!desc.isNullOrBlank()) texts.add("[$desc]")
+            for (i in 0 until node.childCount) {
+                val child = node.getChild(i) ?: continue
+                walk(child)
+            }
+        }
+        return try {
+            walk(root)
+            texts.take(16).joinToString(" | ")
+        } finally {
+            root.recycle()
+        }
     }
 
     /** The icon that carries "New Chat" is not itself clickable. The button around it is. */
@@ -538,10 +613,15 @@ class K12LearningE2ETest {
     private fun waitEdit(timeout: Long): UiObject2? {
         val deadline = System.currentTimeMillis() + timeout
         while (System.currentTimeMillis() < deadline) {
+            device.findObject(By.res(context.packageName, "k12_chat_composer"))
+                ?.takeIf { it.visibleBounds.height() > 0 }
+                ?.let { return it }
             device.findObjects(By.clazz("android.widget.EditText"))
                 .lastOrNull { it.visibleBounds.height() > 0 }
                 ?.let { return it }
-            device.findObject(By.textContains("Message"))?.let { return it }
+            for (hint in listOf("Message", "发消息")) {
+                device.findObject(By.textContains(hint))?.let { return it }
+            }
             device.waitForIdle(400)
         }
         return null

@@ -21,6 +21,7 @@ A tablet on `1.0.0-rc.5` could be approved in the admin UI and still sit on 绑�
 - A parent-configured hotline from the heartbeat is what the second emergency screen shows.
 - The parent screen recomposes when a wrong attempt is recorded, so 待复习 and the knowledge-point line appear without leaving the page.
 - A sync requested while one is already running waits for that cycle and returns its result. The empty session list shows the New Chat button once the server model is ready, which is the button named by 还没有对话。点下面的按钮开始。 Saving the paired endpoint uses `commit()`, so a process death cannot drop it.
+- The chat composer exposes resource id `k12_chat_composer`. A New Chat tap with no visible model entry is logged and does not navigate.
 
 ### Added
 

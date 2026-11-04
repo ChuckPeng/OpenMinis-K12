@@ -119,7 +119,9 @@ adb shell cmd uimode night yes || true
 adb shell settings put global hidden_api_policy 1 || true
 adb shell settings put global window_animation_scale 0 || true
 adb shell settings put global transition_animation_scale 0 || true
-adb shell settings put global animator_duration_scale 0 || true
+# Compose pane changes read this scale. 0 leaves the chat pane on its first
+# frame, so New Chat never reaches the composer. Window transitions stay off.
+adb shell settings put global animator_duration_scale 1 || true
 adb shell settings put global hide_error_dialogs 1 || true
 adb shell settings put secure anr_show_background 0 || true
 adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS || true

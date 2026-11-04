@@ -1579,7 +1579,14 @@ fun SessionListScreen(
                     onNewChat = {
                         scope.launch {
                             val sessionId = viewModel.createNewSession()
-                            if (sessionId != null) onNewChatGuarded(sessionId)
+                            if (sessionId != null) {
+                                onNewChatGuarded(sessionId)
+                            } else {
+                                android.util.Log.w(
+                                    "K12Chat",
+                                    "New Chat ignored: no visible model entry",
+                                )
+                            }
                         }
                     },
                     onNewChatWithGroup = { groupId ->

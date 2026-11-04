@@ -202,7 +202,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
@@ -7056,6 +7059,8 @@ fun ChatScreen(
                                 )
                             },
                             modifier = Modifier
+                                .semantics { testTagsAsResourceId = true }
+                                .testTag("k12_chat_composer")
                                 .fillMaxWidth()
                                 .heightIn(min = 25.dp)
                                 .focusRequester(inputFocusRequester)
