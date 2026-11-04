@@ -1,5 +1,6 @@
 package com.openminis.k12.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -12,6 +13,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.ui.Alignment
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -33,16 +35,28 @@ import com.openminis.k12.safety.ContentSafetyGuide
 @Composable
 fun K12EmergencyHost() {
     val screen = K12SafetyRuntime.screen.value ?: return
-    androidx.compose.material3.AlertDialog(
-        onDismissRequest = {},
-        title = { Text(ContentSafetyGuide.TEXT_TELL_ADULT) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(screen.messageText)
-                if (screen.hotlineNumber != null) Text(screen.hotlineNumber)
-            }
-        },
-        confirmButton = {
+    // In the activity window, above chat. A dialog window is easy to miss
+    // from the active window, and the hotline has to be its own line: the
+    // step-2 message used to glue it onto the first sentence.
+    BackHandler { }
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.surface,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
+        ) {
+            Text(
+                ContentSafetyGuide.TEXT_TELL_ADULT,
+                style = MaterialTheme.typography.headlineSmall,
+            )
+            val hotline = screen.hotlineText?.takeIf { it.isNotBlank() }
+            if (hotline != null) Text(hotline)
+            val number = screen.hotlineNumber?.takeIf { it.isNotBlank() }
+            if (number != null) Text(number)
             if (screen.showDeclineButton) {
                 Button(onClick = { K12SafetyRuntime.decline() }) {
                     Text(ContentSafetyGuide.TEXT_DECLINE_BUTTON)
@@ -52,8 +66,8 @@ fun K12EmergencyHost() {
                     Text(stringResource(R.string.k12_emergency_ok))
                 }
             }
-        },
-    )
+        }
+    }
 }
 
 @Composable

@@ -203,14 +203,24 @@ class K12LearningE2ETest {
             die("parent screen did not return; on screen: ${visibleTexts()}")
         }
         clickText(LOCK_LEAVE)
+        val lockDeadline = System.currentTimeMillis() + 12_000
+        while (System.currentTimeMillis() < lockDeadline && K12Runtime.parentUnlocked()) {
+            if (device.findObject(By.text(LOCK_LEAVE)) != null) clickText(LOCK_LEAVE)
+            else device.waitForIdle(400)
+        }
+        if (K12Runtime.parentUnlocked()) {
+            die("锁定并离开 did not lock the parent session; on screen: ${visibleTexts()}")
+        }
 
         openChatAgain()
         sendChat(CRISIS_A)
-        assertNotNull(waitText(TELL_ADULT, 20_000))
+        awaitVisible(TELL_ADULT, 20_000, "emergency step 1 did not open")
         shot("14-safety-step1")
         clickText(DECLINE)
-        assertNotNull(waitText(TELL_ADULT, 10_000))
-        assertTrue(device.findObject(By.textContains("0000")) == null)
+        awaitVisible(TELL_ADULT, 10_000, "emergency step 2 did not stay up")
+        if (device.findObject(By.textContains("0000")) != null || textInAnyWindow("0000")) {
+            die("step 2 showed a number before a hotline was configured")
+        }
         shot("15-safety-step2")
         clickText(KNOWN)
         assertEquals(false, modelStats().optBoolean("crisis_reached_model"))
@@ -226,32 +236,45 @@ class K12LearningE2ETest {
         Log.i(TAG, "limit sync ${synced::class.java.simpleName}")
         if (synced !is com.openminis.k12.device.SyncRunResult.Ok) fail("sync after config: $synced")
         assertEquals(10, ScreenTime.limits(K12Runtime.snapshot().profile.stage, K12Runtime.snapshot().profile).dailyMin)
+        if (K12SafetyRuntime.hotlineText != "练习热线" || K12SafetyRuntime.hotlineNumber != "0000") {
+            die(
+                "hotline was not applied from the heartbeat " +
+                    "textSet=${!K12SafetyRuntime.hotlineText.isNullOrBlank()} " +
+                    "numberSet=${!K12SafetyRuntime.hotlineNumber.isNullOrBlank()}",
+            )
+        }
 
         openChatAgain()
         sendChat(CRISIS_B)
-        waitText(TELL_ADULT, 20_000)
+        awaitVisible(TELL_ADULT, 20_000, "second emergency step 1 did not open")
         clickText(DECLINE)
-        assertNotNull(waitText("练习热线", 10_000))
-        assertNotNull(waitText("0000", 10_000))
+        awaitVisible("练习热线", 10_000, "configured hotline text did not show")
+        awaitVisible("0000", 10_000, "configured hotline number did not show")
         shot("16-safety-hotline")
         clickText(KNOWN)
 
         val chip = waitStarts("剩余 ", 20_000)
-        val minutes = Regex("\\d+").find(chip?.text.orEmpty())?.value?.toIntOrNull()
+        if (chip == null) die("time chip missing; on screen: ${visibleTexts()}")
+        val minutes = Regex("\\d+").find(chip.text.orEmpty())?.value?.toIntOrNull()
         shot("17-time-chip")
-        if (minutes != null) assertTrue("chip showed $minutes", minutes <= 10)
+        if (minutes == null) die("time chip had no minutes; text=${chip.text}")
+        assertTrue("chip showed $minutes", minutes <= 10)
 
         val now = System.currentTimeMillis()
         K12Runtime.onForeground(now)
         K12Runtime.tick(now + 11L * 60_000)
         assertTrue(K12Runtime.studyLocked())
         launch()
-        assertNotNull(waitText(LOCK_TITLE, 20_000))
+        if (waitText(LOCK_TITLE, 20_000) == null) {
+            die("lock screen missing; on screen: ${visibleTexts()}")
+        }
         shot("18-lock")
         clickText(EXTEND)
         setField(PIN, "1357")
         clickText(PIN_OK)
-        assertNotNull(waitAny(listOf(EMPTY_CHAT, "New Chat"), 20_000))
+        if (waitAny(listOf(EMPTY_CHAT, "New Chat"), 20_000) == null) {
+            die("chat did not return after extend; on screen: ${visibleTexts()}")
+        }
         shot("19-extended")
 
         val usageSync = K12SyncRuntime.runOnce()
@@ -321,42 +344,96 @@ class K12LearningE2ETest {
 
     private fun sendChat(text: String) {
         var edit = waitEdit(20_000) ?: die("chat field missing; on screen: ${visibleTexts()}")
-        val typed = runCatching {
-            edit.click()
-            edit.setText(text)
-            edit.text?.toString().orEmpty()
-        }.getOrElse {
-            edit = waitEdit(5_000) ?: die("chat field missing; on screen: ${visibleTexts()}")
-            runCatching { edit.click() }
-            runCatching { edit.setText(text) }
-            runCatching { edit.text?.toString() }.getOrNull().orEmpty()
-        }
-        if (!typed.contains(text.take(2))) {
-            val again = waitEdit(5_000) ?: die("chat field missing; on screen: ${visibleTexts()}")
-            runCatching { again.click() }
-            InstrumentationRegistry.getInstrumentation().sendStringSync(text)
-        }
+        replaceComposer(edit, text)
         closeKeyboard()
-        if (!clickDesc("Send", required = false)) {
-            val field = waitEdit(3_000)
-            val bounds = field?.let { runCatching { Rect(it.visibleBounds) }.getOrNull() }
-            if (bounds == null) die("missing desc Send; on screen: ${visibleTexts()}")
-            // The send control sits on the composer's right edge.
-            val x = (bounds.right - 20).coerceIn(1, device.displayWidth - 2)
-            val y = bounds.centerY().coerceIn(1, device.displayHeight - 2)
-            device.click(x, y)
-            device.waitForIdle(400)
+        // Dismissing the IME can drop an uncommitted composition. Put the
+        // text back while the keyboard is down, then send.
+        if (!composerHolds(text)) {
+            edit = waitEdit(5_000) ?: die("chat field missing after keyboard; on screen: ${visibleTexts()}")
+            replaceComposer(edit, text)
         }
+        if (!composerHolds(text)) die("composer did not keep the message; on screen: ${visibleTexts()}")
+        tapSendUntilCleared()
+    }
+
+    private fun replaceComposer(edit: UiObject2, text: String) {
+        runCatching { edit.click() }
+        runCatching { edit.setText(text) }
+        device.waitForIdle(300)
+        if (composerHolds(text)) return
+        runCatching { edit.click() }
+        InstrumentationRegistry.getInstrumentation().sendStringSync(text)
+        device.waitForIdle(300)
+    }
+
+    private fun composerText(): String =
+        waitEdit(1_000)?.let { runCatching { it.text?.toString() }.getOrNull() }.orEmpty()
+
+    /** Null when the composer is not on screen. An empty string is a cleared field. */
+    private fun currentComposer(): String? {
+        val node = runCatching { findComposer() }.getOrNull() ?: return null
+        return runCatching { node.text?.toString() }.getOrNull().orEmpty()
+    }
+
+    private fun composerHolds(text: String): Boolean = composerText().contains(text)
+
+    private fun tapSendUntilCleared() {
+        val deadline = System.currentTimeMillis() + 8_000
+        while (System.currentTimeMillis() < deadline) {
+            if (K12SafetyRuntime.screen.value != null) return
+            val shown = currentComposer()
+            if (shown != null && shown.isBlank()) return
+            if (!clickDesc("Send", required = false, timeoutMs = 1_500)) {
+                val node = device.findObject(By.desc("Send"))
+                val bounds = node?.let { runCatching { Rect(it.visibleBounds) }.getOrNull() }
+                if (bounds != null && bounds.width() > 0 && bounds.height() > 0) {
+                    device.click(
+                        bounds.centerX().coerceIn(1, device.displayWidth - 2),
+                        bounds.centerY().coerceIn(1, device.displayHeight - 2),
+                    )
+                } else {
+                    val fieldBounds = waitEdit(2_000)?.let { runCatching { Rect(it.visibleBounds) }.getOrNull() }
+                    if (fieldBounds == null) die("missing desc Send; on screen: ${visibleTexts()}")
+                    val x = (fieldBounds.right - 20).coerceIn(1, device.displayWidth - 2)
+                    val y = fieldBounds.centerY().coerceIn(1, device.displayHeight - 2)
+                    device.click(x, y)
+                }
+            }
+            device.waitForIdle(500)
+        }
+        die(
+            "send did not leave the composer; unlocked=${K12Runtime.parentUnlocked()} " +
+                "on screen: ${visibleTexts()}",
+        )
     }
 
     private fun openChatAgain() {
-        val send = runCatching { device.findObject(By.desc("Send")) }.getOrNull()
-        if (send != null && visible(send)) return
-        if (runCatching { device.findObject(By.desc("New Chat")) }.getOrNull()?.let { visible(it) } != true) {
-            device.pressBack()
-            device.waitForIdle(800)
+        if (K12Runtime.parentUnlocked()) {
+            die("parent session still unlocked; on screen: ${visibleTexts()}")
         }
-        openNewChat()
+        val deadline = System.currentTimeMillis() + 12_000
+        var pressedBack = false
+        while (System.currentTimeMillis() < deadline) {
+            val send = runCatching { device.findObject(By.desc("Send")) }.getOrNull()
+            if (send != null && visible(send)) return
+            if (runCatching { device.findObject(By.desc("New Chat")) }.getOrNull()?.let { visible(it) } == true) {
+                openNewChat()
+                return
+            }
+            // The parent column is still up. Back would leave it without locking.
+            if (device.findObject(By.text(LOCK_LEAVE)) != null) {
+                device.waitForIdle(400)
+                continue
+            }
+            if (!pressedBack) {
+                device.pressBack()
+                pressedBack = true
+                device.waitForIdle(800)
+                continue
+            }
+            device.waitForIdle(400)
+        }
+        die("chat did not open after lock; on screen: ${visibleTexts()}")
     }
 
     /** New Chat stays on the list until the detail pane is actually showing the composer. */
@@ -531,6 +608,12 @@ class K12LearningE2ETest {
     }
 
     private fun clickText(text: String) {
+        // Dialog and overlay buttons are already on screen. Scrolling first
+        // moves the page underneath them.
+        if (accessibilityActivate(text)) {
+            device.waitForIdle(500)
+            return
+        }
         swipeUntil(text)
         val deadline = System.currentTimeMillis() + 8_000
         while (System.currentTimeMillis() < deadline) {
@@ -593,40 +676,80 @@ class K12LearningE2ETest {
 
     /** ACTION_CLICK on the button that contains this label, not on the scroller. */
     private fun accessibilityActivate(text: String): Boolean {
-        val root = InstrumentationRegistry.getInstrumentation().uiAutomation.rootInActiveWindow ?: return false
+        val roots = windowRoots()
+        if (roots.isEmpty()) return false
         return try {
-            val found = ArrayList<AccessibilityNodeInfo>()
-            collectExactText(root, text, found)
-            val label = found.firstOrNull { it.isVisibleToUser } ?: return false
-            val labelBounds = Rect()
-            label.getBoundsInScreen(labelBounds)
-            if (labelBounds.isEmpty) return false
-            var best: AccessibilityNodeInfo? = null
-            var bestArea = Int.MAX_VALUE
-            var current: AccessibilityNodeInfo? = label
-            var guard = 0
-            val labelArea = (labelBounds.width() * labelBounds.height()).coerceAtLeast(1)
-            while (current != null && guard++ < 8) {
-                if (current.isClickable && !current.isScrollable) {
-                    val bounds = Rect()
-                    current.getBoundsInScreen(bounds)
-                    val area = bounds.width() * bounds.height()
-                    if (bounds.contains(labelBounds.centerX(), labelBounds.centerY()) &&
-                        area in 1..labelArea * 12 &&
-                        area < bestArea
-                    ) {
-                        best = current
-                        bestArea = area
+            for (root in roots) {
+                val found = ArrayList<AccessibilityNodeInfo>()
+                collectExactText(root, text, found)
+                val label = found.firstOrNull { it.isVisibleToUser } ?: continue
+                val labelBounds = Rect()
+                label.getBoundsInScreen(labelBounds)
+                if (labelBounds.isEmpty) continue
+                var best: AccessibilityNodeInfo? = null
+                var bestArea = Int.MAX_VALUE
+                var current: AccessibilityNodeInfo? = label
+                var guard = 0
+                val labelArea = (labelBounds.width() * labelBounds.height()).coerceAtLeast(1)
+                while (current != null && guard++ < 8) {
+                    if (current.isClickable && !current.isScrollable) {
+                        val bounds = Rect()
+                        current.getBoundsInScreen(bounds)
+                        val area = bounds.width() * bounds.height()
+                        if (bounds.contains(labelBounds.centerX(), labelBounds.centerY()) &&
+                            area in 1..labelArea * 12 &&
+                            area < bestArea
+                        ) {
+                            best = current
+                            bestArea = area
+                        }
                     }
+                    current = current.parent
                 }
-                current = current.parent
+                if (best?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true) return true
             }
-            best?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true
+            false
         } catch (_: IllegalStateException) {
             false
         } finally {
-            root.recycle()
+            roots.forEach { runCatching { it.recycle() } }
         }
+    }
+
+    private fun windowRoots(): List<AccessibilityNodeInfo> {
+        val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        val windows = runCatching { automation.windows }.getOrNull().orEmpty()
+        val roots = windows.mapNotNull { runCatching { it.root }.getOrNull() }
+        if (roots.isNotEmpty()) return roots
+        return listOfNotNull(runCatching { automation.rootInActiveWindow }.getOrNull())
+    }
+
+    private fun textInAnyWindow(text: String): Boolean {
+        val roots = windowRoots()
+        return try {
+            roots.any { root ->
+                val found = ArrayList<AccessibilityNodeInfo>()
+                collectExactText(root, text, found)
+                found.any { it.isVisibleToUser }
+            }
+        } finally {
+            roots.forEach { runCatching { it.recycle() } }
+        }
+    }
+
+    private fun awaitVisible(text: String, timeout: Long, why: String) {
+        val deadline = System.currentTimeMillis() + timeout
+        while (System.currentTimeMillis() < deadline) {
+            if (device.findObject(By.text(text)) != null || textInAnyWindow(text)) return
+            device.waitForIdle(400)
+        }
+        val step = K12SafetyRuntime.screen.value?.step
+        val reached = runCatching { modelStats().optBoolean("crisis_reached_model") }.getOrNull()
+        die(
+            "$why; unlocked=${K12Runtime.parentUnlocked()} step=$step " +
+                "hotlineSet=${!K12SafetyRuntime.hotlineText.isNullOrBlank()} " +
+                "modelSawCrisis=$reached on screen: ${visibleTexts()}",
+        )
     }
 
     private fun collectExactText(node: AccessibilityNodeInfo, text: String, out: MutableList<AccessibilityNodeInfo>) {
@@ -665,8 +788,8 @@ class K12LearningE2ETest {
         die("not visible: ${texts.joinToString()}")
     }
 
-    private fun clickDesc(desc: String, required: Boolean = true): Boolean {
-        val deadline = System.currentTimeMillis() + 20_000
+    private fun clickDesc(desc: String, required: Boolean = true, timeoutMs: Long = 20_000): Boolean {
+        val deadline = System.currentTimeMillis() + timeoutMs
         while (System.currentTimeMillis() < deadline) {
             // A gesture click on New Chat is claimed by the button's
             // drag-to-swap handler, so the accessibility click action is first.
@@ -719,7 +842,7 @@ class K12LearningE2ETest {
     }
 
     private fun visibleTexts(): String {
-        val root = InstrumentationRegistry.getInstrumentation().uiAutomation.rootInActiveWindow ?: return ""
+        val roots = windowRoots()
         val texts = ArrayList<String>()
         fun walk(node: AccessibilityNodeInfo) {
             val text = node.text?.toString()
@@ -731,10 +854,13 @@ class K12LearningE2ETest {
             }
         }
         return try {
-            walk(root)
-            texts.take(16).joinToString(" | ")
+            roots.forEach { walk(it) }
+            texts.filterNot { com.openminis.k12.safety.ContentSafetyGuide.isCrisis(it) }
+                .distinct()
+                .take(16)
+                .joinToString(" | ")
         } finally {
-            root.recycle()
+            roots.forEach { runCatching { it.recycle() } }
         }
     }
 
