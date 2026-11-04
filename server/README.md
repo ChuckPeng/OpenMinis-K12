@@ -22,7 +22,7 @@
 cd server/web && npm install && npm run build:ci && cd ..
 PKG=github.com/ChuckPeng/OpenMinis-K12/server/internal/version
 CGO_ENABLED=0 go build -trimpath \
-  -ldflags "-X ${PKG}.Version=1.0.0-rc.5 -X ${PKG}.VersionCode=1000011" \
+  -ldflags "-X ${PKG}.Version=1.0.0-rc.6 -X ${PKG}.VersionCode=1000012" \
   -o openminis-k12-server ./cmd/openminis-k12-server
 ./openminis-k12-server --version
 ```

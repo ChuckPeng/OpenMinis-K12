@@ -2,6 +2,7 @@ package com.openminis.k12.android
 
 import android.content.Context
 import com.openminis.k12.device.PairedEndpoint
+import com.openminis.k12.device.PairingOutcome
 import com.openminis.k12.device.PendingDiagnostic
 import com.openminis.k12.device.PendingStudyEvent
 import com.openminis.k12.device.DiagnosticOutbox
@@ -36,7 +37,57 @@ class K12SyncPrefs(context: Context) {
             .putString(KEY_DEVICE, endpoint.deviceId)
             .putString(KEY_CHILD, endpoint.childId)
             .putString(KEY_CERT, endpoint.certFingerprint)
+            .remove(KEY_PENDING_BASE)
+            .remove(KEY_PENDING_DEVICE)
+            .remove(KEY_PENDING_CHILD)
+            .remove(KEY_PENDING_CERT)
             .apply()
+    }
+
+    fun loadPending(): PairingOutcome.Pending? {
+        val base = prefs.getString(KEY_PENDING_BASE, null) ?: return null
+        val device = prefs.getString(KEY_PENDING_DEVICE, null) ?: return null
+        if (base.isBlank() || device.isBlank()) return null
+        return PairingOutcome.Pending(
+            deviceId = device,
+            baseUrl = base,
+            childId = prefs.getString(KEY_PENDING_CHILD, "") ?: "",
+            certFingerprint = prefs.getString(KEY_PENDING_CERT, null),
+        )
+    }
+
+    fun savePending(pending: PairingOutcome.Pending) {
+        prefs.edit()
+            .putString(KEY_PENDING_BASE, pending.baseUrl)
+            .putString(KEY_PENDING_DEVICE, pending.deviceId)
+            .putString(KEY_PENDING_CHILD, pending.childId)
+            .putString(KEY_PENDING_CERT, pending.certFingerprint)
+            .commit()
+    }
+
+    fun clearPending() {
+        prefs.edit()
+            .remove(KEY_PENDING_BASE)
+            .remove(KEY_PENDING_DEVICE)
+            .remove(KEY_PENDING_CHILD)
+            .remove(KEY_PENDING_CERT)
+            .commit()
+    }
+
+    fun loadAlerts(): List<String> {
+        val raw = prefs.getString(KEY_ALERTS, null) ?: return emptyList()
+        return try {
+            val arr = JSONArray(raw)
+            List(arr.length()) { arr.getString(it) }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    fun saveAlerts(items: List<String>) {
+        val arr = JSONArray()
+        items.forEach { arr.put(it) }
+        prefs.edit().putString(KEY_ALERTS, arr.toString()).commit()
     }
 
     fun appliedVersion(): Int = prefs.getInt(KEY_VERSION, 0)
@@ -183,5 +234,10 @@ class K12SyncPrefs(context: Context) {
         const val KEY_MODEL_FETCH = "model_fetch_at"
         const val KEY_EVENTS = "events"
         const val KEY_DIAG = "diagnostics"
+        const val KEY_PENDING_BASE = "pending_base_url"
+        const val KEY_PENDING_DEVICE = "pending_device_id"
+        const val KEY_PENDING_CHILD = "pending_child_id"
+        const val KEY_PENDING_CERT = "pending_cert"
+        const val KEY_ALERTS = "alerts"
     }
 }

@@ -44,6 +44,8 @@ import com.openminis.k12.ScreenTime
 import com.openminis.k12.SecretSubmit
 import com.openminis.k12.StudyStage
 import com.openminis.k12.android.K12Runtime
+import com.openminis.k12.android.K12StudyDesk
+import com.openminis.k12.skills.K12SkillBundle
 
 @Composable
 fun K12BreakBannerHost() {
@@ -298,6 +300,14 @@ fun K12ParentScreen(
             modifier = Modifier.semantics { heading() },
         )
         Text(stringResource(R.string.k12_parent_backup_set))
+        if (K12SkillBundle.readAsset(LocalContext.current, K12SkillBundle.CORE_ASSET) != null) {
+            Text(stringResource(R.string.k12_skill_line))
+        }
+        val due = K12StudyDesk.revision.value.let {
+            K12StudyDesk.dueCount(snap.profile.childId.orEmpty())
+        }
+        if (due > 0) Text(stringResource(R.string.k12_review_due, due))
+        if (K12StudyDesk.linkedKnowledge()) Text(stringResource(R.string.k12_kp_linked))
         Text(
             stringResource(R.string.k12_parent_model_status) + " · " +
                 stringResource(if (managed) R.string.k12_parent_model_managed else R.string.k12_parent_model_local),

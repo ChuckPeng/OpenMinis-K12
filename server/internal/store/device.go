@@ -249,6 +249,50 @@ FROM devices WHERE id=?`, id).Scan(
 	return d, nil
 }
 
+func (s *Store) GetDeviceByPubkey(ctx context.Context, pubkey string) (*Device, error) {
+	d := &Device{}
+	err := s.DB.QueryRowContext(ctx, `
+SELECT id, family_id, child_id, label, pubkey, code_secret_enc,
+       status, paired_at, revoked_at, last_seen, app_version,
+       config_version_applied, created_at
+FROM devices WHERE pubkey=?
+ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'pending_confirm' THEN 1 ELSE 2 END, created_at DESC
+LIMIT 1`, pubkey).Scan(
+		&d.ID, &d.FamilyID, &d.ChildID, &d.Label, &d.Pubkey, &d.CodeSecretEnc,
+		&d.Status, &d.PairedAt, &d.RevokedAt, &d.LastSeen, &d.AppVersion,
+		&d.ConfigVersionApplied, &d.CreatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return d, nil
+}
+
+func (s *Store) UpdateDevicePairing(ctx context.Context, id, childID, label, pubkey, secret, status string) error {
+	if status == "active" {
+		_, err := s.DB.ExecContext(ctx, `
+UPDATE devices
+SET child_id=?, label=?, pubkey=?, code_secret_enc=?, status='active', revoked_at=NULL
+WHERE id=?`, childID, label, pubkey, secret, id)
+		return err
+	}
+	_, err := s.DB.ExecContext(ctx, `
+UPDATE devices
+SET child_id=?, label=?, pubkey=?, code_secret_enc=?, status='pending_confirm', revoked_at=NULL
+WHERE id=?`, childID, label, pubkey, secret, id)
+	return err
+}
+
+func (s *Store) DeleteInactiveDevice(ctx context.Context, id string) error {
+	if _, err := s.DB.ExecContext(ctx, `DELETE FROM device_config WHERE device_id=?`, id); err != nil {
+		return err
+	}
+	_, err := s.DB.ExecContext(ctx, `DELETE FROM devices WHERE id=? AND status!='active'`, id)
+	return err
+}
+
 func (s *Store) GetDeviceByChildID(ctx context.Context, childID string) (*Device, error) {
 	d := &Device{}
 	err := s.DB.QueryRowContext(ctx, `

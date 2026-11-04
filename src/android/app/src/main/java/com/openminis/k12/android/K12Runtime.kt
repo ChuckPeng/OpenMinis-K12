@@ -122,6 +122,27 @@ object K12Runtime {
 
     fun permissionReportOrNull(): PermissionReport? = if (installed) probe?.read() else null
 
+    /** Pairing was submitted and is waiting for the parent to confirm. */
+    fun markPending(pending: com.openminis.k12.device.PairingOutcome.Pending) {
+        if (!installed) return
+        state = state.copy(
+            profile = state.profile.copy(
+                pairing = "pending",
+                deviceId = pending.deviceId,
+                childId = pending.childId.ifBlank { state.profile.childId },
+            ),
+        )
+        persist()
+    }
+
+    /** Parent rejected the pending pairing, or the tablet cancelled it. */
+    fun clearPendingPairing() {
+        if (!installed) return
+        if (state.profile.pairing != "pending") return
+        state = state.copy(profile = state.profile.copy(pairing = "unpaired"))
+        persist()
+    }
+
     /** Pairing reached `active`. Schedules the periodic sync and runs one pass now. */
     fun markPaired(endpoint: com.openminis.k12.device.PairedEndpoint) {
         if (installed) {

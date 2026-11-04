@@ -52,6 +52,23 @@ class WorkManagerSyncScheduler(context: Context) : SyncScheduler {
         val manager = WorkManager.getInstance(appContext)
         manager.cancelUniqueWork(SyncSchedule.PERIODIC_WORK)
         manager.cancelUniqueWork(SyncSchedule.SOON_WORK)
+        cancelPairPoll()
+    }
+
+    fun ensurePairPoll() {
+        val request = PeriodicWorkRequestBuilder<K12PairPollWorker>(SyncSchedule.PERIODIC_MINUTES, TimeUnit.MINUTES)
+            .setConstraints(connected())
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, SyncSchedule.BACKOFF_SECONDS, TimeUnit.SECONDS)
+            .build()
+        WorkManager.getInstance(appContext).enqueueUniquePeriodicWork(
+            PAIR_POLL_WORK,
+            ExistingPeriodicWorkPolicy.KEEP,
+            request,
+        )
+    }
+
+    fun cancelPairPoll() {
+        WorkManager.getInstance(appContext).cancelUniqueWork(PAIR_POLL_WORK)
     }
 
     private fun connected() = Constraints.Builder()
@@ -60,5 +77,6 @@ class WorkManagerSyncScheduler(context: Context) : SyncScheduler {
 
     private companion object {
         const val KEY_TRIGGER = "trigger"
+        const val PAIR_POLL_WORK = "k12-pair-poll"
     }
 }

@@ -31,7 +31,13 @@
     <string name="k12_pair_submit">绑定</string>
     <string name="k12_pair_scan">扫描二维码</string>
     <string name="k12_pair_image">从图片识别</string>
+    <string name="k12_pair_waiting">已提交，等家长在管理后台/企微确认…</string>
+    <string name="k12_pair_cancel">取消并重新配对</string>
     <string name="k12_pair_refresh">刷新确认状态</string>
+    <string name="k12_review_due">待复习 %1$d</string>
+    <string name="k12_skill_line">讲题技能已随应用安装</string>
+    <string name="k12_kp_linked">错题已关联知识点</string>
+    <string name="k12_emergency_ok">知道了</string>
     <string name="k12_pair_working">正在连接…</string>
     <string name="k12_pair_active">已绑定家长服务器</string>
     <string name="k12_pair_host">服务器：%1$s</string>

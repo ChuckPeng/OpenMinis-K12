@@ -26,7 +26,35 @@ import com.openminis.app.R
 import com.openminis.k12.PinResult
 import com.openminis.k12.ScreenTime
 import com.openminis.k12.android.K12Runtime
+import com.openminis.k12.android.K12SafetyRuntime
 import com.openminis.k12.model.K12ModelRuntime
+import com.openminis.k12.safety.ContentSafetyGuide
+
+@Composable
+fun K12EmergencyHost() {
+    val screen = K12SafetyRuntime.screen.value ?: return
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = {},
+        title = { Text(ContentSafetyGuide.TEXT_TELL_ADULT) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(screen.messageText)
+                if (screen.hotlineNumber != null) Text(screen.hotlineNumber)
+            }
+        },
+        confirmButton = {
+            if (screen.showDeclineButton) {
+                Button(onClick = { K12SafetyRuntime.decline() }) {
+                    Text(ContentSafetyGuide.TEXT_DECLINE_BUTTON)
+                }
+            } else {
+                Button(onClick = { K12SafetyRuntime.dismiss() }) {
+                    Text(stringResource(R.string.k12_emergency_ok))
+                }
+            }
+        },
+    )
+}
 
 @Composable
 fun K12ScreenTimeChip() {

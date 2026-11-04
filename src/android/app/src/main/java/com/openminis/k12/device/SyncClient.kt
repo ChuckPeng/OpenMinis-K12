@@ -225,6 +225,11 @@ class SyncClient(
      * Uploads sanitized diagnostics report (§19.7).
      * Strictly verifies no problem text or images are included.
      */
+    fun postAlert(alert: JSONObject): HttpResponse {
+        val body = alert.toString().toByteArray(Charsets.UTF_8)
+        return signedRequest("POST", "/api/v1/device/alerts", body, mapOf("Content-Type" to "application/json"))
+    }
+
     fun uploadDiagnostics(diagnosticsJson: JSONObject): HttpResponse {
         // Enforce safety check: no chat or problem content
         val raw = diagnosticsJson.toString()
