@@ -951,13 +951,39 @@ class K12LearningE2ETest {
         dismissAnr()
         closeKeyboard()
         if (onScreen(text)) return
-        repeat(10) {
+        // The label is often already in the tree, below the fold. Asking the
+        // framework to show it scrolls the parent column on API 30, where a
+        // swipe that starts on a text field does not.
+        repeat(4) {
+            if (showOnScreen(text) && onScreen(text)) return
             flick(revealLower = true)
             if (onScreen(text)) return
         }
-        repeat(10) {
+        repeat(6) {
             flick(revealLower = false)
+            if (showOnScreen(text) && onScreen(text)) return
             if (onScreen(text)) return
+        }
+    }
+
+    private fun showOnScreen(text: String): Boolean {
+        val roots = windowRoots()
+        if (roots.isEmpty()) return false
+        return try {
+            for (root in roots) {
+                val found = ArrayList<AccessibilityNodeInfo>()
+                collectExactText(root, text, found)
+                val label = found.firstOrNull { it.packageName?.toString() == context.packageName } ?: continue
+                if (label.performAction(AccessibilityNodeInfo.ACTION_SHOW_ON_SCREEN)) {
+                    device.waitForIdle(350)
+                    return true
+                }
+            }
+            false
+        } catch (_: IllegalStateException) {
+            false
+        } finally {
+            roots.forEach { runCatching { it.recycle() } }
         }
     }
 
@@ -997,7 +1023,9 @@ class K12LearningE2ETest {
         device.waitForIdle(250)
         if (moved && appTexts() != before) return
         val bounds = runCatching { scroller?.visibleBounds }.getOrNull()
-        val x = (bounds?.centerX() ?: (device.displayWidth / 2)).coerceIn(72, device.displayWidth - 24)
+        // Right padding of the parent column. A swipe through the middle
+        // starts on a text field, and that field eats the drag on API 30.
+        val x = (bounds?.right ?: device.displayWidth).minus(12).coerceIn(72, device.displayWidth - 8)
         val top = (bounds?.top ?: 0) + 48
         val bottom = (bounds?.bottom ?: device.displayHeight) - 48
         if (bottom - top < 80) return
@@ -1009,7 +1037,9 @@ class K12LearningE2ETest {
     private fun accessibilityScroll(revealLower: Boolean): Boolean {
         val root = InstrumentationRegistry.getInstrumentation().uiAutomation.rootInActiveWindow ?: return false
         return try {
-            val node = findScrollable(root) ?: return false
+            // The first scrollable node is often a one-line field. Scrolling
+            // that leaves the parent column where it is.
+            val node = tallestScrollable(root) ?: return false
             val action = if (revealLower) {
                 AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
             } else {
@@ -1021,14 +1051,25 @@ class K12LearningE2ETest {
         }
     }
 
-    private fun findScrollable(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
-        if (node.isScrollable && node.isVisibleToUser) return node
-        for (i in 0 until node.childCount) {
-            val child = node.getChild(i) ?: continue
-            val found = findScrollable(child)
-            if (found != null) return found
+    private fun tallestScrollable(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        var best: AccessibilityNodeInfo? = null
+        var bestHeight = 0
+        fun walk(current: AccessibilityNodeInfo) {
+            if (current.isScrollable && current.isVisibleToUser) {
+                val bounds = Rect()
+                current.getBoundsInScreen(bounds)
+                if (bounds.height() > bestHeight && bounds.width() > 40) {
+                    best = current
+                    bestHeight = bounds.height()
+                }
+            }
+            for (i in 0 until current.childCount) {
+                val child = current.getChild(i) ?: continue
+                walk(child)
+            }
         }
-        return null
+        walk(node)
+        return best
     }
 
     private fun closeKeyboard() {
