@@ -173,10 +173,10 @@ class K12LearningE2ETest {
         waitText(PIN_TITLE, 15_000)
         setField(PIN, "1357")
         clickText(PIN_OK)
-        waitText(PARENT, 15_000)
-        waitText(SKILL, 10_000)
-        waitContains(REVIEW, 10_000)
-        waitText(LINKED, 10_000)
+        assertNotNull("parent screen did not open", waitText(PARENT, 15_000))
+        assertNotNull("skill line missing", waitText(SKILL, 10_000))
+        assertNotNull("review count missing", waitContains(REVIEW, 10_000))
+        assertNotNull("knowledge line missing", waitText(LINKED, 10_000))
         swipeUntil(LATER_UNLOCK)
         shot("13-parent")
         clickText(PERM_TITLE)
@@ -661,9 +661,15 @@ class K12LearningE2ETest {
     }
 
     private fun flick(revealLower: Boolean) {
+        // A finger swipe from the left edge is the system back gesture, which
+        // leaves the parent screen. Scroll through the accessibility action.
+        if (accessibilityScroll(revealLower)) {
+            device.waitForIdle(300)
+            return
+        }
         val scroller = device.findObject(By.scrollable(true))
         val bounds = scroller?.visibleBounds
-        val x = (bounds?.left ?: 0) + 8
+        val x = (bounds?.centerX() ?: (device.displayWidth / 2)).coerceIn(72, device.displayWidth - 24)
         val top = (bounds?.top ?: 0) + 48
         val bottom = (bounds?.bottom ?: device.displayHeight) - 48
         if (bottom - top < 80) {
@@ -674,6 +680,31 @@ class K12LearningE2ETest {
         val travel = ((bottom - top) * 0.45f).toInt().coerceAtLeast(80)
         if (revealLower) device.swipe(x, top + travel, x, top, 30) else device.swipe(x, top, x, top + travel, 30)
         device.waitForIdle(300)
+    }
+
+    private fun accessibilityScroll(revealLower: Boolean): Boolean {
+        val root = InstrumentationRegistry.getInstrumentation().uiAutomation.rootInActiveWindow ?: return false
+        return try {
+            val node = findScrollable(root) ?: return false
+            val action = if (revealLower) {
+                AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
+            } else {
+                AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
+            }
+            node.performAction(action)
+        } finally {
+            root.recycle()
+        }
+    }
+
+    private fun findScrollable(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        if (node.isScrollable && node.isVisibleToUser) return node
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            val found = findScrollable(child)
+            if (found != null) return found
+        }
+        return null
     }
 
     private fun closeKeyboard() {
