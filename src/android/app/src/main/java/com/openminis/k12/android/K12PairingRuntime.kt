@@ -76,18 +76,26 @@ object K12PairingRuntime {
     private fun adopt(context: Context, outcome: PairingOutcome): PairingOutcome {
         when (outcome) {
             is PairingOutcome.Active -> {
-                pending.value = null
-                endpoint.value = outcome.endpoint
-                notice.value = null
-                K12SyncRuntime.clearPending()
-                DevicePairing.noteActivated(outcome.endpoint, DeviceStatus.ACTIVE)
+                synchronized(lock) {
+                    // Drop polls that are still on the wire. A late
+                    // pending_confirm must not undo this activation.
+                    generation++
+                    pending.value = null
+                    endpoint.value = outcome.endpoint
+                    notice.value = null
+                    K12SyncRuntime.clearPending()
+                    DevicePairing.noteActivated(outcome.endpoint, DeviceStatus.ACTIVE)
+                }
             }
             is PairingOutcome.Pending -> {
-                K12SyncRuntime.savePending(outcome)
-                pending.value = outcome
-                notice.value = PairingText.PENDING
-                K12Runtime.markPending(outcome)
-                K12SyncRuntime.ensurePairPoll()
+                synchronized(lock) {
+                    if (K12Runtime.snapshot().profile.pairing == "active") return outcome
+                    K12SyncRuntime.savePending(outcome)
+                    pending.value = outcome
+                    notice.value = PairingText.PENDING
+                    K12Runtime.markPending(outcome)
+                    K12SyncRuntime.ensurePairPoll()
+                }
             }
             is PairingOutcome.Failed -> {
                 notice.value = outcome.message

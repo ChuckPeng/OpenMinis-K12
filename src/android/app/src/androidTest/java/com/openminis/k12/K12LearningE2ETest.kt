@@ -195,7 +195,11 @@ class K12LearningE2ETest {
         }
         shot("12-permissions")
         device.pressBack()
-        if (waitText(PARENT, 10_000) == null) {
+        device.waitForIdle(800)
+        // Back restores the parent column scrolled to the bottom, so the
+        // title 家长 is off screen. 锁定并离开 is the control this step needs.
+        swipeUntil(LOCK_LEAVE)
+        if (waitText(LOCK_LEAVE, 8_000) == null) {
             die("parent screen did not return; on screen: ${visibleTexts()}")
         }
         clickText(LOCK_LEAVE)
@@ -522,12 +526,16 @@ class K12LearningE2ETest {
             val node = runCatching { device.findObject(By.text(text)) }.getOrNull()
             val own = node?.let { runCatching { Rect(it.visibleBounds) }.getOrNull() }
             if (node != null && own != null && fullyInside(own)) {
-                // The parent column is clickable. Its center is not this label.
-                // Use the label, or the smallest clickable node that contains it.
-                val bounds = smallestClickableBounds(node, own)
-                val x = bounds.centerX().coerceIn(1, device.displayWidth - 2)
-                val y = bounds.centerY().coerceIn(1, device.displayHeight - 2)
-                device.click(x, y)
+                // Coordinate taps on API 30 land on the scrolling column.
+                // ACTION_CLICK hits the button that owns the label. A coordinate
+                // tap is only the fallback, and it uses the label or the
+                // smallest clickable node around it, never the column center.
+                if (!accessibilityActivate(text)) {
+                    val bounds = smallestClickableBounds(node, own)
+                    val x = bounds.centerX().coerceIn(1, device.displayWidth - 2)
+                    val y = bounds.centerY().coerceIn(1, device.displayHeight - 2)
+                    device.click(x, y)
+                }
                 device.waitForIdle(500)
                 return
             }
@@ -568,8 +576,54 @@ class K12LearningE2ETest {
         }
         val chosen = best ?: return Rect(own)
         val ownArea = (own.width() * own.height()).coerceAtLeast(1)
-        if (chosen.width() * chosen.height() > ownArea * 6) return Rect(own)
+        if (chosen.width() * chosen.height() > ownArea * 12) return Rect(own)
         return chosen
+    }
+
+    /** ACTION_CLICK on the button that contains this label, not on the scroller. */
+    private fun accessibilityActivate(text: String): Boolean {
+        val root = InstrumentationRegistry.getInstrumentation().uiAutomation.rootInActiveWindow ?: return false
+        return try {
+            val found = ArrayList<AccessibilityNodeInfo>()
+            collectExactText(root, text, found)
+            val label = found.firstOrNull { it.isVisibleToUser } ?: return false
+            val labelBounds = Rect()
+            label.getBoundsInScreen(labelBounds)
+            if (labelBounds.isEmpty) return false
+            var best: AccessibilityNodeInfo? = null
+            var bestArea = Int.MAX_VALUE
+            var current: AccessibilityNodeInfo? = label
+            var guard = 0
+            val labelArea = (labelBounds.width() * labelBounds.height()).coerceAtLeast(1)
+            while (current != null && guard++ < 8) {
+                if (current.isClickable && !current.isScrollable) {
+                    val bounds = Rect()
+                    current.getBoundsInScreen(bounds)
+                    val area = bounds.width() * bounds.height()
+                    if (bounds.contains(labelBounds.centerX(), labelBounds.centerY()) &&
+                        area in 1..labelArea * 12 &&
+                        area < bestArea
+                    ) {
+                        best = current
+                        bestArea = area
+                    }
+                }
+                current = current.parent
+            }
+            best?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true
+        } catch (_: IllegalStateException) {
+            false
+        } finally {
+            root.recycle()
+        }
+    }
+
+    private fun collectExactText(node: AccessibilityNodeInfo, text: String, out: MutableList<AccessibilityNodeInfo>) {
+        if (node.text?.toString() == text) out.add(node)
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            collectExactText(child, text, out)
+        }
     }
 
     private fun clickDescAny(vararg descs: String) {

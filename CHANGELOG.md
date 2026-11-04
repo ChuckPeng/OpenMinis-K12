@@ -24,6 +24,7 @@ A tablet on `1.0.0-rc.5` could be approved in the admin UI and still sit on зїСе
 - The chat composer exposes resource id `k12_chat_composer`. A New Chat tap with no visible model entry is logged and does not navigate.
 - A parent-delivered model stays available for a new chat. Persisting the provider config rewrites the entry id, and the following cleanup was deleting that entry.
 - Confirming the parent PIN opens the parent page. The gate used to pop back to the session list first, that hop locked the parent session, and the parent page was then refused.
+- A pair-status poll that is still in flight when the parent confirms cannot write `pending` back over `active`.
 
 ### Added
 
