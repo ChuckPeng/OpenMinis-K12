@@ -112,6 +112,19 @@ object RoutePolicy {
         return isStudy(path)
     }
 
+    /**
+     * A correct PIN on the parent gate navigates to the parent page by popping
+     * the gate. That pop's top is the session list for one destination change.
+     * Locking on that hop clears the unlock before the parent page is reached,
+     * and the parent route is then refused.
+     */
+    fun lockParentOnChildEntry(fromRoute: String?, toRoute: String?, parentUnlocked: Boolean): Boolean {
+        if (!isChildFacing(toRoute)) return false
+        val fromGate = fromRoute?.substringBefore('?') == StudyEntry.PARENT_GATE_PATH
+        if (fromGate && parentUnlocked) return false
+        return true
+    }
+
     fun isStudy(path: String): Boolean {
         val base = path.substringBefore('?').substringBefore('/')
         return base == "sessions" || base == "chat" || base == "chat_files"

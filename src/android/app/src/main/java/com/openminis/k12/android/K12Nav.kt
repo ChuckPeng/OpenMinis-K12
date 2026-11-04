@@ -7,10 +7,14 @@ import com.openminis.k12.StudyEntry
 
 object K12Nav {
     private var redirecting = false
+    private var previousRoute: String? = null
 
     fun onDestinationChanged(controller: NavController, destination: NavDestination) {
         val route = destination.route ?: return
-        if (RoutePolicy.isChildFacing(route)) K12Runtime.onEnteredChildFacing()
+        if (RoutePolicy.lockParentOnChildEntry(previousRoute, route, K12Runtime.parentUnlocked())) {
+            K12Runtime.onEnteredChildFacing()
+        }
+        previousRoute = route
         redirectIfBlocked(controller, route)
     }
 

@@ -672,8 +672,14 @@ fun AppNavigation(
             com.openminis.k12.ui.K12ParentGateScreen(
                 onUnlocked = {
                     val dest = if (next == "providers") Routes.PROVIDER_LIST else com.openminis.k12.ColdStart.PARENT
-                    navController.popBackStack()
-                    navController.navigate(dest)
+                    // One navigation. A separate popBackStack() lands on the
+                    // session list first, and that child route locks the
+                    // parent session before this page can open.
+                    val gateId = navController.currentDestination?.id
+                    navController.navigate(dest) {
+                        if (gateId != null) popUpTo(gateId) { inclusive = true }
+                        launchSingleTop = true
+                    }
                 },
             )
         }

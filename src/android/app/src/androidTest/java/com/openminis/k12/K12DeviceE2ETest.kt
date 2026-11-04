@@ -1,8 +1,11 @@
 package com.openminis.k12
 
 import android.content.Intent
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
+import android.graphics.Rect
+import android.os.SystemClock
 import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -138,14 +141,54 @@ class K12DeviceE2ETest {
         val intent = Intent().setClassName(context.packageName, "com.openminis.app.MainActivity")
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
         context.startActivity(intent)
-        val title = device.wait(Until.findObject(By.text(ONBOARDING)), 30_000)
+        assertNotNull(
+            "onboarding title was not visible",
+            device.wait(Until.findObject(By.text(ONBOARDING)), 30_000),
+        )
         val shot = File(context.filesDir, "k12-onboarding-dark.png")
-        device.takeScreenshot(shot)
-        assertNotNull("onboarding title was not visible", title)
-        assertFalse(title.visibleBounds.isEmpty)
-        val bitmap = BitmapFactory.decodeFile(shot.absolutePath)
-        assertNotNull(bitmap)
-        val bounds = title.visibleBounds
+        // API 34 can publish the title in the accessibility tree before the
+        // first frame is composited. A black buffer has min=max=0. Keep the
+        // contrast bar and sample again until the glyphs are on screen.
+        val deadline = SystemClock.uptimeMillis() + 15_000
+        var min = 0
+        var max = 0
+        var size = "0x0"
+        var boundsText = ""
+        while (SystemClock.uptimeMillis() < deadline) {
+            device.findObject(By.text("Close app"))?.click()
+            device.waitForIdle(400)
+            val title = device.findObject(By.text(ONBOARDING))
+            val bounds = title?.let { runCatching { it.visibleBounds }.getOrNull() }
+            if (bounds == null || bounds.isEmpty) {
+                SystemClock.sleep(400)
+                continue
+            }
+            if (!device.takeScreenshot(shot)) {
+                SystemClock.sleep(400)
+                continue
+            }
+            val bitmap = BitmapFactory.decodeFile(shot.absolutePath)
+            if (bitmap == null) {
+                SystemClock.sleep(400)
+                continue
+            }
+            size = "${bitmap.width}x${bitmap.height}"
+            boundsText = bounds.toShortString()
+            val sample = luminanceSpan(bitmap, bounds)
+            bitmap.recycle()
+            min = sample.first
+            max = sample.second
+            if (max - min >= 40) break
+            SystemClock.sleep(400)
+        }
+        Log.i(TAG, "onboarding contrast min=$min max=$max bitmap=$size bounds=$boundsText")
+        assertTrue(
+            "dark-mode onboarding text has no contrast min=$min max=$max bitmap=$size bounds=$boundsText",
+            max - min >= 40,
+        )
+    }
+
+    private fun luminanceSpan(bitmap: Bitmap, bounds: Rect): Pair<Int, Int> {
         var min = 255
         var max = 0
         var y = bounds.top
@@ -162,8 +205,8 @@ class K12DeviceE2ETest {
             }
             y += 2
         }
-        Log.i(TAG, "onboarding contrast min=$min max=$max")
-        assertTrue("dark-mode onboarding text has no contrast min=$min max=$max", max - min >= 40)
+        if (min == 255 && max == 0) return 0 to 0
+        return min to max
     }
 
     private fun required(name: String): String {

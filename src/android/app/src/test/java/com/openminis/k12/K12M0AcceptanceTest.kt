@@ -117,6 +117,45 @@ class K12M0AcceptanceTest {
     }
 
     @Test
+    fun parentGatePopDoesNotLockTheSessionItJustOpened() {
+        assertFalse(
+            RoutePolicy.lockParentOnChildEntry(
+                StudyEntry.PARENT_GATE,
+                StudyEntry.SESSIONS,
+                parentUnlocked = true,
+            ),
+        )
+        assertFalse(
+            RoutePolicy.lockParentOnChildEntry(
+                "k12/parent-gate?next=parent",
+                "sessions",
+                parentUnlocked = true,
+            ),
+        )
+        assertTrue(
+            RoutePolicy.lockParentOnChildEntry(
+                ColdStart.PARENT,
+                StudyEntry.SESSIONS,
+                parentUnlocked = true,
+            ),
+        )
+        assertTrue(
+            RoutePolicy.lockParentOnChildEntry(
+                StudyEntry.PARENT_GATE,
+                StudyEntry.SESSIONS,
+                parentUnlocked = false,
+            ),
+        )
+        assertFalse(
+            RoutePolicy.lockParentOnChildEntry(
+                StudyEntry.PARENT_GATE,
+                ColdStart.PARENT,
+                parentUnlocked = true,
+            ),
+        )
+    }
+
+    @Test
     fun wpM0_4_f2_denyListBlocksCapabilitiesAndKeepsSpeech() {
         val denied = listOf(
             "android-contacts", "contacts", "android-location", "calendar",

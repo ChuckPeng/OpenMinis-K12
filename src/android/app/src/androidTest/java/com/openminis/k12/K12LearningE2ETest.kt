@@ -170,13 +170,22 @@ class K12LearningE2ETest {
         device.pressBack()
         device.waitForIdle(1_000)
         clickDescAny("Settings", "设置")
-        waitText(PIN_TITLE, 15_000)
+        if (waitText(PIN_TITLE, 15_000) == null) {
+            die("parent PIN gate did not open; on screen: ${visibleTexts()}")
+        }
         setField(PIN, "1357")
         clickText(PIN_OK)
-        assertNotNull("parent screen did not open", waitText(PARENT, 15_000))
-        assertNotNull("skill line missing", waitText(SKILL, 10_000))
-        assertNotNull("review count missing", waitContains(REVIEW, 10_000))
-        assertNotNull("knowledge line missing", waitText(LINKED, 10_000))
+        if (waitText(PARENT, 15_000) == null) {
+            die(
+                "parent screen did not open unlocked=${K12Runtime.parentUnlocked()} " +
+                    "on screen: ${visibleTexts()}",
+            )
+        }
+        swipeUntil(SKILL)
+        if (waitText(SKILL, 10_000) == null) die("skill line missing; on screen: ${visibleTexts()}")
+        if (waitContains(REVIEW, 10_000) == null) die("review count missing; on screen: ${visibleTexts()}")
+        swipeUntil(LINKED)
+        if (waitText(LINKED, 10_000) == null) die("knowledge line missing; on screen: ${visibleTexts()}")
         swipeUntil(LATER_UNLOCK)
         shot("13-parent")
         clickText(PERM_TITLE)
@@ -445,10 +454,16 @@ class K12LearningE2ETest {
     }
 
     /** The field this label belongs to. The lowest edit on the form is a different field. */
-    private fun editBelow(labelNode: UiObject2): UiObject2? =
+    private fun editBelow(labelNode: UiObject2): UiObject2? = runCatching {
+        val labelY = labelNode.visibleBounds.centerY()
         device.findObjects(By.clazz("android.widget.EditText"))
-            .filter { it.visibleBounds.height() > 0 }
-            .minByOrNull { kotlin.math.abs(it.visibleBounds.centerY() - labelNode.visibleBounds.centerY()) }
+            .mapNotNull { edit ->
+                val bounds = runCatching { edit.visibleBounds }.getOrNull() ?: return@mapNotNull null
+                if (bounds.height() <= 0) null else edit to bounds.centerY()
+            }
+            .minByOrNull { kotlin.math.abs(it.second - labelY) }
+            ?.first
+    }.getOrNull()
 
     private fun chooseStage(label: String) {
         swipeUntil(label)
@@ -466,9 +481,21 @@ class K12LearningE2ETest {
 
     private fun clickText(text: String) {
         swipeUntil(text)
-        val node = waitText(text, 8_000) ?: die("not visible: $text")
-        node.click()
-        device.waitForIdle(500)
+        val deadline = System.currentTimeMillis() + 8_000
+        while (System.currentTimeMillis() < deadline) {
+            if (accessibilityClickText(text)) {
+                device.waitForIdle(500)
+                return
+            }
+            val node = runCatching { device.findObject(By.text(text)) }.getOrNull()
+            if (node != null && visible(node)) {
+                runCatching { clickableOf(node).click() }
+                device.waitForIdle(500)
+                return
+            }
+            device.waitForIdle(200)
+        }
+        die("not visible: $text")
     }
 
     private fun clickDescAny(vararg descs: String) {
@@ -527,15 +554,36 @@ class K12LearningE2ETest {
             val found = ArrayList<AccessibilityNodeInfo>()
             collectDesc(root, desc, found)
             val node = found.firstOrNull { it.isVisibleToUser } ?: return false
-            var current: AccessibilityNodeInfo? = node
-            var guard = 0
-            while (current != null && guard++ < 6 && !current.isClickable) {
-                current = current.parent
-            }
-            (current ?: node).performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            clickNode(node)
         } finally {
             root.recycle()
         }
+    }
+
+    /** Button labels are often a child of the clickable node. A gesture on the text misses. */
+    private fun accessibilityClickText(text: String): Boolean {
+        val root = InstrumentationRegistry.getInstrumentation().uiAutomation.rootInActiveWindow ?: return false
+        return try {
+            val found = ArrayList<AccessibilityNodeInfo>()
+            collectText(root, text, found)
+            val node = found.firstOrNull { it.isVisibleToUser } ?: return false
+            clickNode(node)
+        } catch (_: IllegalStateException) {
+            false
+        } finally {
+            root.recycle()
+        }
+    }
+
+    private fun clickNode(node: AccessibilityNodeInfo): Boolean {
+        var current: AccessibilityNodeInfo? = node
+        var guard = 0
+        while (current != null && guard++ < 8 && !current.isClickable) {
+            current = current.parent
+        }
+        val target = current ?: return false
+        if (!target.isClickable || (target.isScrollable && target !== node)) return false
+        return target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
     }
 
     private fun collectDesc(node: AccessibilityNodeInfo, desc: String, out: MutableList<AccessibilityNodeInfo>) {
@@ -543,6 +591,14 @@ class K12LearningE2ETest {
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
             collectDesc(child, desc, out)
+        }
+    }
+
+    private fun collectText(node: AccessibilityNodeInfo, text: String, out: MutableList<AccessibilityNodeInfo>) {
+        if (node.text?.toString() == text) out.add(node)
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            collectText(child, text, out)
         }
     }
 
@@ -613,19 +669,28 @@ class K12LearningE2ETest {
     private fun waitEdit(timeout: Long): UiObject2? {
         val deadline = System.currentTimeMillis() + timeout
         while (System.currentTimeMillis() < deadline) {
-            device.findObject(By.res(context.packageName, "k12_chat_composer"))
-                ?.takeIf { it.visibleBounds.height() > 0 }
-                ?.let { return it }
-            device.findObjects(By.clazz("android.widget.EditText"))
-                .lastOrNull { it.visibleBounds.height() > 0 }
-                ?.let { return it }
-            for (hint in listOf("Message", "发消息")) {
-                device.findObject(By.textContains(hint))?.let { return it }
-            }
+            val found = runCatching { findComposer() }.getOrNull()
+            if (found != null) return found
             device.waitForIdle(400)
         }
         return null
     }
+
+    private fun findComposer(): UiObject2? {
+        device.findObject(By.res(context.packageName, "k12_chat_composer"))
+            ?.takeIf { visible(it) }
+            ?.let { return it }
+        device.findObjects(By.clazz("android.widget.EditText"))
+            .lastOrNull { visible(it) }
+            ?.let { return it }
+        for (hint in listOf("Message", "发消息")) {
+            device.findObject(By.textContains(hint))?.takeIf { visible(it) }?.let { return it }
+        }
+        return null
+    }
+
+    private fun visible(node: UiObject2): Boolean =
+        runCatching { node.visibleBounds.height() > 0 }.getOrDefault(false)
 
     /**
      * The CI emulator is 320×640. A form taller than that puts the action
@@ -655,8 +720,8 @@ class K12LearningE2ETest {
     }
 
     private fun onScreen(text: String): Boolean {
-        val node = device.findObject(By.text(text)) ?: return false
-        val bounds = node.visibleBounds
+        val node = runCatching { device.findObject(By.text(text)) }.getOrNull() ?: return false
+        val bounds = runCatching { node.visibleBounds }.getOrNull() ?: return false
         return bounds.height() > 0 && bounds.top >= 0 && bounds.bottom <= device.displayHeight
     }
 
