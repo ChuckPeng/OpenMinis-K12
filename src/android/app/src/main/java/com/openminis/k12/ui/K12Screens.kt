@@ -33,8 +33,10 @@ import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.unit.dp
 import com.openminis.app.R
 import com.openminis.k12.OnboardingStep
@@ -291,7 +293,12 @@ fun K12ParentScreen(
     val managed = k12ModelManagedNow()
     K12Surface {
     Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .semantics { testTagsAsResourceId = true }
+            .verticalScroll(rememberScrollState())
+            .testTag("k12_parent_column")
+            .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(
@@ -327,7 +334,13 @@ fun K12ParentScreen(
         OutlinedButton(onClick = { K12Runtime.touch(); K12Runtime.grantWhileUnlocked() }, modifier = Modifier.fillMaxWidth()) {
             Text(stringResource(R.string.k12_parent_extend))
         }
-        Button(onClick = { K12Runtime.touch(); onPermissions() }, modifier = Modifier.fillMaxWidth()) {
+        Button(
+            onClick = { K12Runtime.touch(); onPermissions() },
+            modifier = Modifier
+                .fillMaxWidth()
+                .semantics { testTagsAsResourceId = true }
+                .testTag("k12_parent_permissions"),
+        ) {
             Text(stringResource(R.string.k12_perm_title))
         }
         Button(onClick = { K12Runtime.touch(); onModelKey() }, modifier = Modifier.fillMaxWidth()) {
@@ -340,7 +353,13 @@ fun K12ParentScreen(
         LaterRow(stringResource(R.string.k12_parent_totp))
         LaterRow(stringResource(R.string.k12_parent_catalog))
         LaterRow(stringResource(R.string.k12_parent_unlock))
-        OutlinedButton(onClick = onExit, modifier = Modifier.fillMaxWidth()) {
+        OutlinedButton(
+            onClick = onExit,
+            modifier = Modifier
+                .fillMaxWidth()
+                .semantics { testTagsAsResourceId = true }
+                .testTag("k12_parent_lock"),
+        ) {
             Text(stringResource(R.string.k12_parent_lock))
         }
     }

@@ -54,6 +54,13 @@ object SymjaCalcEngine : AlgebraCas {
     private val warmupStarted = AtomicBoolean(false)
     private val retires = AtomicInteger(0)
 
+    /** True after one check has finished. The first check waits out table load. */
+    private val served = AtomicBoolean(false)
+
+    /** Unit tests wait until a check is inside the gate. Not for production. */
+    @Volatile
+    internal var enteredForTests: Boolean = false
+
     @Volatile
     private var worker: ExecutorService? = null
 
@@ -90,7 +97,14 @@ object SymjaCalcEngine : AlgebraCas {
 
     fun warmUp() {
         if (onAndroidMainThread()) return
-        runEngine { it.clearVariables() }
+        // Loading the table is not a completed check. The first evaluate still
+        // gets the long budget if this call is what built the engine.
+        runEngine(markServed = false) { it.clearVariables() }
+    }
+
+    /** Lets a unit test observe a check that arrives while warmup holds the gate. */
+    internal fun prepareColdWaitForTests() {
+        served.set(false)
     }
 
     override fun evaluate(expression: String): CalcResult {
@@ -533,14 +547,23 @@ object SymjaCalcEngine : AlgebraCas {
         data class Fail(val message: String) : Outcome<Nothing>()
     }
 
-    private fun <T> runEngine(block: (ExprEvaluator) -> T): Outcome<T> {
+    private fun <T> runEngine(markServed: Boolean = true, block: (ExprEvaluator) -> T): Outcome<T> {
         if (retires.get() >= MAX_RETIRES) return Outcome.Fail("unavailable")
-        val budget = timeoutForTestsMs.coerceAtLeast(1L)
-        if (!gate.tryLock(budget, TimeUnit.MILLISECONDS)) return Outcome.Fail("busy")
+        val evalBudget = timeoutForTestsMs.coerceAtLeast(1L)
+        // noteQuestion starts warmup, and the model can call k12_calc while
+        // that load still holds the gate. Waiting only evalBudget returns
+        // "busy" and the chat then shows that word instead of the number.
+        // A check that arrives during the first load waits for the table.
+        // After one check has completed, a taken gate is "busy" at evalBudget.
+        val cold = evaluator == null || !served.get()
+        val lockBudget = if (cold) INIT_BUDGET_MS else evalBudget
+        if (!gate.tryLock(lockBudget, TimeUnit.MILLISECONDS)) return Outcome.Fail("busy")
+        enteredForTests = true
         try {
             val exec = worker ?: Executors.newSingleThreadExecutor { runnable ->
                 Thread(runnable, "k12-symja").apply { isDaemon = true }
             }.also { worker = it }
+            val firstLoad = evaluator == null
             val ready = exec.submit(Callable { ensureEvaluator() })
             val ev = try {
                 ready.get(INIT_BUDGET_MS, TimeUnit.MILLISECONDS)
@@ -559,8 +582,18 @@ object SymjaCalcEngine : AlgebraCas {
                 ev.clearVariables()
                 block(ev)
             })
+            // The first numeric check also loads classes inside the eval.
+            // A shortened test budget still applies, so the timeout test can
+            // discard a stalled engine without waiting out init.
+            val workBudget = if ((firstLoad || !served.get()) && timeoutForTestsMs >= DEFAULT_TIMEOUT_MS) {
+                INIT_BUDGET_MS
+            } else {
+                evalBudget
+            }
             return try {
-                Outcome.Ok(work.get(budget, TimeUnit.MILLISECONDS))
+                val value = work.get(workBudget, TimeUnit.MILLISECONDS)
+                if (markServed) served.set(true)
+                Outcome.Ok(value)
             } catch (_: TimeoutException) {
                 work.cancel(true)
                 retire()
@@ -578,6 +611,7 @@ object SymjaCalcEngine : AlgebraCas {
             Thread.currentThread().interrupt()
             return Outcome.Fail("interrupted")
         } finally {
+            enteredForTests = false
             gate.unlock()
         }
     }
@@ -617,6 +651,7 @@ object SymjaCalcEngine : AlgebraCas {
     private fun retire() {
         retires.incrementAndGet()
         evaluator = null
+        served.set(false)
         worker?.shutdownNow()
         worker = null
     }

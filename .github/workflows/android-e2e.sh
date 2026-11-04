@@ -119,9 +119,8 @@ adb shell cmd uimode night yes || true
 adb shell settings put global hidden_api_policy 1 || true
 adb shell settings put global window_animation_scale 0 || true
 adb shell settings put global transition_animation_scale 0 || true
-# Compose pane changes read this scale. 0 leaves the chat pane on its first
-# frame, so New Chat never reaches the composer. Window transitions stay off.
-adb shell settings put global animator_duration_scale 1 || true
+# The chat scaffold settles a pane immediately when this scale is 0.
+adb shell settings put global animator_duration_scale 0 || true
 adb shell settings put global hide_error_dialogs 1 || true
 adb shell settings put secure back_gesture_inset_scale 0 || true
 adb shell settings put secure anr_show_background 0 || true
@@ -177,6 +176,11 @@ run_one() {
 : > "$ART/instrument-api${API_LEVEL}.txt"
 failed=0
 run_one device com.openminis.k12.K12DeviceE2ETest || failed=1
+run_one chat 'com.openminis.k12.K12LearningE2ETest#chatAndMath' || failed=1
+run_one photo 'com.openminis.k12.K12LearningE2ETest#photoQuestion' || failed=1
+run_one parent 'com.openminis.k12.K12LearningE2ETest#parentPage' || failed=1
+run_one safety 'com.openminis.k12.K12LearningE2ETest#safetyAndHotline' || failed=1
+run_one timelock 'com.openminis.k12.K12LearningE2ETest#timeLimitLockUsageReport' || failed=1
 run_one learning 'com.openminis.k12.K12LearningE2ETest#learningJourney' || failed=1
 run_one pending 'com.openminis.k12.K12LearningE2ETest#pendingPairingActivatesAfterRestart' || failed=1
 exit "$failed"

@@ -19,6 +19,8 @@ import androidx.test.uiautomator.By
 import androidx.test.uiautomator.Direction
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.UiObject2
+import androidx.test.uiautomator.UiScrollable
+import androidx.test.uiautomator.UiSelector
 import androidx.test.uiautomator.Until
 import com.openminis.k12.android.K12PairingRuntime
 import com.openminis.k12.android.K12Runtime
@@ -61,6 +63,7 @@ class K12LearningE2ETest {
     @Before
     fun allowEmulatorHttp() {
         PairingClient.allowCleartextForTests = true
+        runCatching { resetModelStats() }
     }
 
     @After
@@ -123,53 +126,146 @@ class K12LearningE2ETest {
         setField(BACKUP, "e2e-pass")
         setField(BACKUP_AGAIN, "e2e-pass")
         clickText(NEXT)
-        assertNotNull("secrets were rejected", waitText(PERM_LATER, 15_000))
+        if (waitText(PERM_LATER, 15_000) == null) die("secrets were rejected; on screen: ${visibleTexts()}")
         shot("04-permissions")
         clickText(NEXT)
-        assertNotNull("pairing form did not open", waitText(PAIR_TITLE, 15_000))
+        if (waitText(PAIR_TITLE, 15_000) == null) die("pairing form did not open; on screen: ${visibleTexts()}")
         fillPairing(baseUrl, code)
         clickText(BIND)
         waitText(WAIT_TITLE, 30_000)
         shot("05-pending")
         restartProcess()
         launch()
-        assertNotNull(waitText(WAIT_TITLE, 20_000))
+        if (waitText(WAIT_TITLE, 20_000) == null) die("pending screen missing after restart; on screen: ${visibleTexts()}")
         shot("06-pending-restart")
         val childId = K12Runtime.snapshot().profile.childId.orEmpty()
         val deviceId = K12Runtime.snapshot().profile.deviceId.orEmpty()
         assertTrue("child id was not a v4", childId.length >= 32)
         admin.approve(deviceId)
         admin.putTabletModel(modelUrl)
-        assertNotNull("empty chat did not open after the model arrived", waitText(EMPTY_CHAT, 90_000))
+        if (waitText(EMPTY_CHAT, 90_000) == null) {
+            die("empty chat did not open after the model arrived; on screen: ${visibleTexts()}")
+        }
         shot("07-sessions")
         assertEquals("active", K12Runtime.snapshot().profile.pairing)
         assertModelApplied(modelUrl)
         val seen = admin.deviceRow(deviceId)
-        assertTrue(seen.optString("last_seen").isNotBlank())
+        if (seen.optString("last_seen").isBlank()) die("last_seen missing")
 
+        exerciseChat()
+        exercisePhoto()
+        exerciseParent()
+        exerciseSafety(admin, childId)
+        exerciseTime(admin, childId, deviceId)
+        Log.i(TAG, "journey ok")
+    }
+
+    @Test
+    fun chatAndMath() {
+        reachChat()
+        exerciseChat()
+    }
+
+    @Test
+    fun photoQuestion() {
+        reachChat()
+        exercisePhoto()
+    }
+
+    @Test
+    fun parentPage() {
+        reachChat()
+        exerciseParent()
+    }
+
+    @Test
+    fun safetyAndHotline() {
+        val paired = reachChat()
+        exerciseSafety(paired.admin, paired.childId)
+    }
+
+    @Test
+    fun timeLimitLockUsageReport() {
+        val paired = reachChat()
+        recordWrongAttempt()
+        paired.admin.putChildConfig(
+            paired.childId,
+            JSONObject()
+                .put("daily_limit_minutes", 10)
+                .put("hotline_text", "练习热线")
+                .put("hotline_number", "0000"),
+        )
+        val synced = K12SyncRuntime.runOnce()
+        if (synced !is com.openminis.k12.device.SyncRunResult.Ok) die("sync after config: $synced")
+        exerciseTime(paired.admin, paired.childId, paired.deviceId)
+    }
+
+    private data class PairedTablet(val admin: Admin, val childId: String, val deviceId: String)
+
+    private fun reachChat(): PairedTablet {
+        val baseUrl = required("baseUrl")
+        val modelUrl = required("modelUrl")
+        val admin = admin()
+        val code = admin.pairCode()
+        resetTablet()
+        seedPairingStep()
+        launch()
+        fillPairing(baseUrl, code)
+        clickText(BIND)
+        if (waitText(WAIT_TITLE, 30_000) == null) die("waiting screen missing; on screen: ${visibleTexts()}")
+        restartProcess()
+        launch()
+        if (waitText(WAIT_TITLE, 20_000) == null) {
+            die("pending screen missing after restart; on screen: ${visibleTexts()}")
+        }
+        val childId = K12Runtime.snapshot().profile.childId.orEmpty()
+        val deviceId = K12Runtime.snapshot().profile.deviceId.orEmpty()
+        if (childId.length < 32 || deviceId.isBlank()) die("pair ids missing")
+        admin.approve(deviceId)
+        admin.putTabletModel(modelUrl)
+        if (waitText(EMPTY_CHAT, 90_000) == null) {
+            die("empty chat did not open; on screen: ${visibleTexts()}")
+        }
+        if (K12Runtime.snapshot().profile.pairing != "active") die("pairing did not become active")
+        assertModelApplied(modelUrl)
+        if (admin.deviceRow(deviceId).optString("last_seen").isBlank()) die("last_seen missing")
+        return PairedTablet(admin, childId, deviceId)
+    }
+
+    private fun exerciseChat() {
         openNewChat()
         sendChat("2+2")
-        assertNotNull(waitContains(MATH_ANSWER, 120_000))
+        awaitContains(MATH_ANSWER, 120_000, "math answer")
+        val stats = modelStats()
+        if (stats.optInt("tool_calls") < 1 || stats.optInt("tool_results") < 1) {
+            die("k12_calc round trip missing")
+        }
         shot("08-math")
         sendChat("again")
-        assertNotNull(waitContains(FOLLOW, 90_000))
+        awaitContains(FOLLOW, 90_000, "follow-up")
         shot("09-followup")
-
         device.pressBack()
-        device.waitForIdle(1_000)
+        device.waitForIdle()
         openNewChat()
         sendChat("讲解")
-        assertNotNull(waitContains(SOCRATIC, 90_000))
+        awaitContains(SOCRATIC, 90_000, "socratic answer")
         shot("10-socratic")
+    }
 
+    private fun exercisePhoto() {
+        if (waitEdit(1_000) == null) openNewChat()
         attachFixture()
         sendChat("看图")
-        assertNotNull(waitContains(STEM, 90_000))
+        awaitContains(STEM, 90_000, "photo stem")
         shot("11-photo")
+    }
 
-        TutoringRuntime.dispatch(TutoringAction.SubmitAttempt(correct = false))
-        device.pressBack()
-        device.waitForIdle(1_000)
+    private fun exerciseParent() {
+        recordWrongAttempt()
+        if (waitEdit(800) != null) {
+            device.pressBack()
+            device.waitForIdle()
+        }
         clickDescAny("Settings", "设置")
         if (waitText(PIN_TITLE, 15_000) == null) {
             die("parent PIN gate did not open; on screen: ${visibleTexts()}")
@@ -182,36 +278,33 @@ class K12LearningE2ETest {
                     "on screen: ${visibleTexts()}",
             )
         }
-        swipeUntil(SKILL)
+        scrollParentTo(SKILL)
         if (waitText(SKILL, 10_000) == null) die("skill line missing; on screen: ${visibleTexts()}")
+        scrollParentTo(REVIEW)
         if (waitContains(REVIEW, 10_000) == null) die("review count missing; on screen: ${visibleTexts()}")
-        swipeUntil(LINKED)
+        scrollParentTo(LINKED)
         if (waitText(LINKED, 10_000) == null) die("knowledge line missing; on screen: ${visibleTexts()}")
-        swipeUntil(LATER_UNLOCK)
+        scrollParentTo(LATER_UNLOCK)
         shot("13-parent")
-        clickText(PERM_TITLE)
+        clickTagged(TAG_PERM)
         if (waitText(PERM_REFRESH, 10_000) == null) {
             die("permissions screen did not open; on screen: ${visibleTexts()}")
         }
         shot("12-permissions")
         device.pressBack()
-        device.waitForIdle(800)
-        // Back restores the parent column scrolled to the bottom, so the
-        // title 家长 is off screen. 锁定并离开 is the control this step needs.
-        swipeUntil(LOCK_LEAVE)
-        if (waitText(LOCK_LEAVE, 8_000) == null) {
-            die("parent screen did not return; on screen: ${visibleTexts()}")
-        }
-        clickText(LOCK_LEAVE)
+        device.waitForIdle()
+        clickTagged(TAG_LOCK)
         val lockDeadline = System.currentTimeMillis() + 12_000
         while (System.currentTimeMillis() < lockDeadline && K12Runtime.parentUnlocked()) {
-            if (device.findObject(By.text(LOCK_LEAVE)) != null) clickText(LOCK_LEAVE)
-            else device.waitForIdle(400)
+            if (device.findObject(By.res(context.packageName, TAG_LOCK)) != null) clickTagged(TAG_LOCK)
+            else device.waitForIdle()
         }
         if (K12Runtime.parentUnlocked()) {
             die("锁定并离开 did not lock the parent session; on screen: ${visibleTexts()}")
         }
+    }
 
+    private fun exerciseSafety(admin: Admin, childId: String) {
         openChatAgain()
         sendChat(CRISIS_A)
         awaitVisible(TELL_ADULT, 20_000, "emergency step 1 did not open")
@@ -223,7 +316,7 @@ class K12LearningE2ETest {
         }
         shot("15-safety-step2")
         clickText(KNOWN)
-        assertEquals(false, modelStats().optBoolean("crisis_reached_model"))
+        if (modelStats().optBoolean("crisis_reached_model")) die("crisis text reached the model")
 
         admin.putChildConfig(
             childId,
@@ -234,8 +327,10 @@ class K12LearningE2ETest {
         )
         val synced = K12SyncRuntime.runOnce()
         Log.i(TAG, "limit sync ${synced::class.java.simpleName}")
-        if (synced !is com.openminis.k12.device.SyncRunResult.Ok) fail("sync after config: $synced")
-        assertEquals(10, ScreenTime.limits(K12Runtime.snapshot().profile.stage, K12Runtime.snapshot().profile).dailyMin)
+        if (synced !is com.openminis.k12.device.SyncRunResult.Ok) die("sync after config: $synced")
+        if (ScreenTime.limits(K12Runtime.snapshot().profile.stage, K12Runtime.snapshot().profile).dailyMin != 10) {
+            die("daily limit was not applied")
+        }
         if (K12SafetyRuntime.hotlineText != "练习热线" || K12SafetyRuntime.hotlineNumber != "0000") {
             die(
                 "hotline was not applied from the heartbeat " +
@@ -252,18 +347,26 @@ class K12LearningE2ETest {
         awaitVisible("0000", 10_000, "configured hotline number did not show")
         shot("16-safety-hotline")
         clickText(KNOWN)
+        val flushed = K12SyncRuntime.runOnce()
+        if (flushed !is com.openminis.k12.device.SyncRunResult.Ok) die("alert sync: $flushed")
+        val alerts = admin.get("/api/v1/admin/alerts")
+        if (alerts.code != 200 || !alerts.body.contains("emergency") || !alerts.body.contains("self_harm")) {
+            die("safety alert was not stored")
+        }
+    }
 
+    private fun exerciseTime(admin: Admin, childId: String, deviceId: String) {
         val chip = waitStarts("剩余 ", 20_000)
         if (chip == null) die("time chip missing; on screen: ${visibleTexts()}")
         val minutes = Regex("\\d+").find(chip.text.orEmpty())?.value?.toIntOrNull()
         shot("17-time-chip")
         if (minutes == null) die("time chip had no minutes; text=${chip.text}")
-        assertTrue("chip showed $minutes", minutes <= 10)
+        if (minutes > 10) die("chip showed $minutes")
 
         val now = System.currentTimeMillis()
         K12Runtime.onForeground(now)
         K12Runtime.tick(now + 11L * 60_000)
-        assertTrue(K12Runtime.studyLocked())
+        if (!K12Runtime.studyLocked()) die("study did not lock after the jumped tick")
         launch()
         if (waitText(LOCK_TITLE, 20_000) == null) {
             die("lock screen missing; on screen: ${visibleTexts()}")
@@ -278,17 +381,19 @@ class K12LearningE2ETest {
         shot("19-extended")
 
         val usageSync = K12SyncRuntime.runOnce()
-        if (usageSync !is com.openminis.k12.device.SyncRunResult.Ok) fail("usage sync: $usageSync")
+        if (usageSync !is com.openminis.k12.device.SyncRunResult.Ok) die("usage sync: $usageSync")
         val after = admin.deviceRow(deviceId)
-        assertTrue(after.optInt("companion_minutes") >= 1)
+        if (after.optInt("companion_minutes") < 1) die("companion minutes were not recorded")
         val report = admin.generateReport(childId)
         val attempts = report.optJSONObject("metrics")?.optInt("attempts") ?: -1
-        assertTrue("report attempts=$attempts", attempts >= 1)
-        val alerts = admin.get("/api/v1/admin/alerts")
-        assertEquals(200, alerts.code)
-        assertTrue(alerts.body.contains("emergency"))
-        assertTrue(alerts.body.contains("self_harm"))
-        Log.i(TAG, "journey ok attempts=$attempts minutes=${after.optInt("companion_minutes")}")
+        if (attempts < 1) die("report attempts=$attempts")
+        Log.i(TAG, "time ok attempts=$attempts minutes=${after.optInt("companion_minutes")}")
+    }
+
+    private fun recordWrongAttempt() {
+        TutoringRuntime.dispatch(TutoringAction.Start(questionHash = "e2e-wrong", stemCharCount = 3))
+        TutoringRuntime.dispatch(TutoringAction.ConfirmStem(3))
+        TutoringRuntime.dispatch(TutoringAction.SubmitAttempt(correct = false))
     }
 
     private fun resetTablet() {
@@ -502,7 +607,7 @@ class K12LearningE2ETest {
                 K12Runtime.snapshot().profile.pairing == "active"
             // The session list is composed after the sync result returns.
             if (ready && (chatSurfaceVisible() || waitUntilChatSurface(8_000))) return
-            Thread.sleep(500)
+            device.waitForIdle(500)
         }
         if (status.managed &&
             status.baseUrl == modelUrl &&
@@ -541,6 +646,17 @@ class K12LearningE2ETest {
         assertEquals(modelUrl, status.baseUrl)
         assertTrue(status.apiKeySet)
         assertTrue(status.version > 0L)
+    }
+
+    private fun resetModelStats() {
+        val port = required("modelUrl").substringAfter("://").substringAfter(":").substringBefore("/")
+        val connection = (URL("http://10.0.2.2:$port/e2e/reset").openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            connectTimeout = 10_000
+            readTimeout = 10_000
+        }
+        connection.responseCode
+        connection.disconnect()
     }
 
     private fun modelStats(): JSONObject {
@@ -1105,7 +1221,66 @@ class K12LearningE2ETest {
 
     private fun die(message: String): Nothing {
         shot("fail")
-        throw AssertionError(message)
+        val stats = runCatching { modelStats().toString() }.getOrDefault("unavailable")
+        throw AssertionError("$message stats=$stats")
+    }
+
+    private fun awaitContains(text: String, timeout: Long, why: String) {
+        if (waitContains(text, timeout) == null) die("$why; on screen: ${visibleTexts()}")
+    }
+
+    private fun resId(tag: String): String = "${context.packageName}:id/$tag"
+
+    private fun parentColumn(): UiScrollable =
+        UiScrollable(UiSelector().resourceId(resId(TAG_PARENT_COLUMN))).apply { setAsVerticalList() }
+
+    /** Scroll the tagged parent column until this text is inside it. */
+    private fun scrollParentTo(text: String) {
+        dismissAnr()
+        closeKeyboard()
+        if (broughtOnScreen(text)) return
+        val revealed = runCatching {
+            parentColumn().scrollIntoView(UiSelector().textContains(text))
+        }.getOrDefault(false)
+        device.waitForIdle()
+        if (!revealed && waitContains(text, 3_000) == null) {
+            die("parent column did not reveal $text; on screen: ${visibleTexts()}")
+        }
+    }
+
+    /** Scroll the tagged button into view and activate it. */
+    private fun clickTagged(tag: String) {
+        dismissAnr()
+        closeKeyboard()
+        runCatching { parentColumn().scrollIntoView(UiSelector().resourceId(resId(tag))) }
+        device.waitForIdle()
+        if (!activateResource(tag)) die("click missed $tag; on screen: ${visibleTexts()}")
+        device.waitForIdle()
+    }
+
+    private fun activateResource(tag: String): Boolean {
+        val roots = windowRoots()
+        return try {
+            for (root in roots) {
+                val nodes = root.findAccessibilityNodeInfosByViewId(resId(tag))
+                val target = nodes.firstOrNull { it.isVisibleToUser } ?: nodes.firstOrNull() ?: continue
+                var current: AccessibilityNodeInfo? = target
+                var guard = 0
+                while (current != null && guard++ < 6) {
+                    if (current.isClickable &&
+                        current.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                    ) {
+                        return true
+                    }
+                    current = current.parent
+                }
+            }
+            false
+        } catch (_: IllegalStateException) {
+            false
+        } finally {
+            roots.forEach { runCatching { it.recycle() } }
+        }
     }
 
     private fun required(name: String): String {
@@ -1241,6 +1416,9 @@ class K12LearningE2ETest {
         private const val LINKED = "错题已关联知识点"
         private const val PERM_TITLE = "权限自检"
         private const val PERM_REFRESH = "重新检查"
+        private const val TAG_PARENT_COLUMN = "k12_parent_column"
+        private const val TAG_PERM = "k12_parent_permissions"
+        private const val TAG_LOCK = "k12_parent_lock"
         private const val LATER_UNLOCK = "解锁兜底"
         private const val PARENT = "家长"
         private const val PIN_TITLE = "家长 PIN"

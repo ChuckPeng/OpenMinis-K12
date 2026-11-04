@@ -26,6 +26,8 @@ A tablet on `1.0.0-rc.5` could be approved in the admin UI and still sit on зїСе
 - Confirming the parent PIN opens the parent page. The gate used to pop back to the session list first, that hop locked the parent session, and the parent page was then refused.
 - A pair-status poll that is still in flight when the parent confirms cannot write `pending` back over `active`.
 - The emergency screen fills the activity window. The parent hotline phrase and number are each their own line, so the second step can show them after the child declines.
+- `k12_calc` waits for Symja's first load instead of returning `busy` while warmup still holds the engine. A chat that starts a tutoring session and immediately calls the tool now shows the number.
+- With animator duration scale 0, the chat list/detail panes use no slide, so the composer is on screen as soon as New Chat is tapped.
 
 ### Added
 

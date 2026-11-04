@@ -22,7 +22,12 @@ FINAL = "算式的结果是 4。先想一想为什么。"
 NEXT_STEP = "下一步：把两个 2 相加。"
 STEM = "题干：2+2。请确认。"
 SOCRATIC = "想一想，这一步可以怎么做？"
-STATS = {"requests": 0, "crisis_reached_model": False}
+STATS = {
+    "requests": 0,
+    "crisis_reached_model": False,
+    "tool_calls": 0,
+    "tool_results": 0,
+}
 
 
 def flatten(content):
@@ -74,6 +79,7 @@ def decide(body):
         STATS["crisis_reached_model"] = True
     STATS["requests"] += 1
     if role == "tool":
+        STATS["tool_results"] += 1
         shown = text.strip() or "?"
         return ("text", f"算式的结果是 {shown}。先想一想为什么。")
     if image:
@@ -82,6 +88,7 @@ def decide(body):
     if "again" in lowered:
         return ("text", NEXT_STEP)
     if "2+2" in text or "2 + 2" in text:
+        STATS["tool_calls"] += 1
         return ("tool", "2+2")
     return ("text", SOCRATIC)
 
@@ -109,6 +116,13 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/e2e/stats":
             self._json(dict(STATS))
             return
+        if path == "/e2e/reset":
+            STATS["requests"] = 0
+            STATS["crisis_reached_model"] = False
+            STATS["tool_calls"] = 0
+            STATS["tool_results"] = 0
+            self._json({"ok": True})
+            return
         if path in ("/v1/models", "/models"):
             self._json({"object": "list", "data": [{"id": "k12-e2e-model"}]})
             return
@@ -127,6 +141,12 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error(400)
             return
         kind, payload = decide(body)
+        role, _, _, crisis = classify(body.get("messages") if isinstance(body.get("messages"), list) else [])
+        # Role and kind only. The body can contain a crisis sentence.
+        print(
+            "fake-model chat role=%s kind=%s crisis=%d" % (role or "-", kind, 1 if crisis else 0),
+            flush=True,
+        )
         stream = body.get("stream", True)
         if stream:
             self._sse(kind, payload)

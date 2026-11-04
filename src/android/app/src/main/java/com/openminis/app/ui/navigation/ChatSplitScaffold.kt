@@ -1,5 +1,8 @@
 package com.openminis.app.ui.navigation
 
+import android.provider.Settings
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.Orientation
@@ -26,6 +29,9 @@ import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
 import androidx.compose.material3.adaptive.currentWindowAdaptiveInfo
 import androidx.compose.material3.adaptive.currentWindowSize
 import androidx.compose.material3.adaptive.layout.AnimatedPane
+import androidx.compose.material3.adaptive.layout.ThreePaneScaffoldPaneScope
+import androidx.compose.material3.adaptive.layout.calculateDefaultEnterTransition
+import androidx.compose.material3.adaptive.layout.calculateDefaultExitTransition
 import androidx.compose.material3.adaptive.layout.ListDetailPaneScaffoldRole
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -158,6 +164,34 @@ object SessionSearchRequest {
 private const val UI_PREFS = "ui_prefs"
 private const val KEY_LIST_PANE_WIDTH = "tablet_list_pane_width_dp"
 private const val KEY_LIST_COLLAPSED = "tablet_list_pane_collapsed"
+
+/**
+ * Animator duration scale 0 makes [androidx.compose.animation.AnimatedVisibility]
+ * keep a slide at its start offset, so the detail pane stays off screen and
+ * New Chat never shows the composer. None skips that slide and the pane is
+ * in its final place on the first frame. A non-zero scale keeps the defaults.
+ */
+@OptIn(ExperimentalMaterial3AdaptiveApi::class)
+@Composable
+private fun ThreePaneScaffoldPaneScope.settledEnter(): EnterTransition =
+    if (animatorDurationDisabled()) EnterTransition.None
+    else motionDataProvider.calculateDefaultEnterTransition(paneRole)
+
+@OptIn(ExperimentalMaterial3AdaptiveApi::class)
+@Composable
+private fun ThreePaneScaffoldPaneScope.settledExit(): ExitTransition =
+    if (animatorDurationDisabled()) ExitTransition.None
+    else motionDataProvider.calculateDefaultExitTransition(paneRole)
+
+@Composable
+private fun animatorDurationDisabled(): Boolean {
+    val scale = Settings.Global.getFloat(
+        LocalContext.current.contentResolver,
+        Settings.Global.ANIMATOR_DURATION_SCALE,
+        1f,
+    )
+    return scale == 0f
+}
 
 /**
  * [T-android-tablet-split] True when the window should show list and detail
@@ -545,6 +579,8 @@ fun ChatSplitScaffold(
         listPane = {
             AnimatedPane(
                 modifier = if (twoPane) Modifier.width(effectiveListWidth) else Modifier,
+                enterTransition = settledEnter(),
+                exitTransition = settledExit(),
             ) {
                 listPane(
                     // Only reflect a selection when both panes are visible.
@@ -586,7 +622,10 @@ fun ChatSplitScaffold(
             }
         },
         detailPane = {
-            AnimatedPane {
+            AnimatedPane(
+                enterTransition = settledEnter(),
+                exitTransition = settledExit(),
+            ) {
                 // [T-android-tablet-split-gutters] Divider on the detail pane's
                 // leading edge. The two panes differ only by background colour
                 // (#F2F2F7 vs #FFFFFF) and sat pixel-adjacent with no seam, so
